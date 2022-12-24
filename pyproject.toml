@@ -5,9 +5,16 @@ description = ""
 authors = ["Tom Shlomo <tomshlomo@gmail.com>"]
 readme = "README.md"
 packages = [{include = "stratified_models"}]
+description = "A python package for training stratified machine learning models with laplacian regularization"
+license = "MIT"
+readme = "README.md"
+homepage = "https://github.com/tomshlomo/stratified-models"
+repository = "https://github.com/tomshlomo/stratified-models"
+keywords = ["startification", "laplacian regularization", "machine learning"]
+
 
 [tool.poetry.dependencies]
-python = "^3.11"
+python = "^3.9"
 
 
 [build-system]
