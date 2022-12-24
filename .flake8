@@ -1,0 +1,5 @@
+[flake8]
+select = C,E,F,W,I
+max-complexity = 10
+import-order-style = google
+application-import-names = stratified_models
