@@ -1,11 +1,11 @@
-from nox_poetry import session
+from nox_poetry import Session, session
 
 
 python_versions = ["3.9", "3.10", "3.11"]
 
 
-@session(python=python_versions)
-def tests(session):
+@session(python=python_versions)  # type: ignore[misc]
+def tests(session: Session) -> None:
     args = session.posargs or ["--cov"]
     session.run("poetry", "install", "--no-dev", external=True)
     session.install("coverage[toml]", "pytest", "pytest-cov", "pytest-mock")
@@ -15,15 +15,22 @@ def tests(session):
 locations = "stratified_models", "noxfile.py"
 
 
-@session(python="3.11")
-def lint(session):
+@session(python="3.11")  # type: ignore[misc]
+def lint(session: Session) -> None:
     args = session.posargs or locations
     session.install("flake8", "flake8-import-order")
     session.run("flake8", *args)
 
 
-@session(python="3.11")
-def black(session):
+@session(python="3.11")  # type: ignore[misc]
+def black(session: Session) -> None:
     args = session.posargs or locations
     session.install("black")
     session.run("black", "--diff", "--color", *args)
+
+
+@session(python=python_versions)  # type: ignore[misc]
+def mypy(session: Session) -> None:
+    args = session.posargs or locations
+    session.install("mypy")
+    session.run("mypy", *args)
