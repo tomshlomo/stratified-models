@@ -2,7 +2,7 @@
 name = "stratified-models"
 version = "0.1.0"
 description = ""
-authors = ["tom.shlomo <tom.shlomo@ridewithvia.com>"]
+authors = ["Tom Shlomo <tomshlomo@gmail.com>"]
 readme = "README.md"
 packages = [{include = "stratified_models"}]
 
