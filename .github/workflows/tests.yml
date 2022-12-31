@@ -1,0 +1,43 @@
+name: Tests
+
+on:
+  - push
+  - pull_request
+
+jobs:
+  tests:
+    name: ${{ matrix.session }} ${{ matrix.python }} / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - { python: "3.9", os: "macos-latest" }
+          - { python: "3.9", os: "ubuntu-latest" }
+          - { python: "3.10", os: "macos-latest" }
+          - { python: "3.10", os: "ubuntu-latest" }
+          - { python: "3.11", os: "macos-latest" }
+          - { python: "3.11", os: "ubuntu-latest" }
+
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python ${{ matrix.python }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: Install Poetry
+        run: |
+          pipx install --pip-args=--constraint=.github/workflows/constraints.txt poetry
+          poetry --version
+
+      - name: Install Nox
+        run: |
+          pipx install --pip-args=--constraint=.github/workflows/constraints.txt nox
+          pipx inject --pip-args=--constraint=.github/workflows/constraints.txt nox nox-poetry
+          nox --version
+
+      - name: Run Nox
+        run: |
+          nox --python=${{ matrix.python }}

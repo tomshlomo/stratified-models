@@ -1,6 +1,5 @@
 from nox_poetry import Session, session
 
-
 python_versions = ["3.9", "3.10", "3.11"]
 
 
@@ -34,3 +33,14 @@ def mypy(session: Session) -> None:
     args = session.posargs or locations
     session.install("mypy")
     session.run("mypy", *args)
+
+
+package = "stratified_models"
+
+
+@session(python=python_versions)  # type: ignore[misc]
+def typeguard(session: Session) -> None:
+    args = session.posargs or []
+    session.run("poetry", "install", "--no-dev", external=True)
+    session.install("pytest", "typeguard")
+    session.run("pytest", f"--typeguard-packages={package}", *args)
