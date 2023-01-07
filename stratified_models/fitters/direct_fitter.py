@@ -1,3 +1,5 @@
+from typing import Tuple
+
 import networkx as nx
 import numpy as np
 import numpy.typing as npt
@@ -38,7 +40,7 @@ class DirectFitter:
         graph: nx.Graph,
         l2_reg: float,
         m: int,
-    ) -> (scipy.sparse.csr_matrix, npt.NDArray,):
+    ) -> Tuple[scipy.sparse.csr_matrix, npt.NDArray[np.float64]]:
         k = graph.number_of_nodes()
         km = k * m
         a = scipy.sparse.eye(km, format="csr") * l2_reg

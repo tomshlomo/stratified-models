@@ -1,22 +1,23 @@
 from dataclasses import dataclass
-from typing import Protocol, TypeVar
+from typing import Protocol, TypeAlias, TypeVar
 
 import networkx as nx
+import numpy as np
 import numpy.typing as npt
 import pandas as pd
 
 Node = TypeVar("Node")
-Theta = pd.DataFrame
+Theta: TypeAlias = pd.DataFrame
 LAPLACE_REG_PARAM_KEY = "laplace_reg_param"
 
 
 @dataclass
 class NodeData:
-    x: npt.NDArray
-    y: npt.NDArray
+    x: npt.NDArray[np.float64]
+    y: npt.NDArray[np.float64]
 
 
-class StratifiedLinearRegressionFitter(Protocol[Node]):
+class StratifiedLinearRegressionFitter(Protocol[Node]):  # pragma: no cover
     def fit(
         self,
         nodes_data: dict[Node, NodeData],

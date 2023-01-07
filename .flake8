@@ -1,6 +1,5 @@
 [flake8]
-select = C,E,F,W,I
+select = C,E,F,W
 max-complexity = 10
-import-order-style = google
 application-import-names = stratified_models
 max-line-length = 88

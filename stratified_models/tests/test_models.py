@@ -1,4 +1,5 @@
 from itertools import product
+from typing import Tuple
 
 import networkx as nx
 import numpy as np
@@ -15,7 +16,9 @@ from stratified_models.fitters.protocols import (
 )
 
 
-def get_data(reg1: float, reg2: float, m: int, n: int):
+def get_data(
+    reg1: float, reg2: float, m: int, n: int
+) -> Tuple[dict[str, nx.Graph], dict[Tuple[int, int], NodeData]]:
     graphs = {
         "1": nx.path_graph(2),
         "2": nx.path_graph(3),
@@ -65,12 +68,12 @@ fitters = [
 )
 def test_fit(
     m: int,
-    fitter: StratifiedLinearRegressionFitter,
+    fitter: StratifiedLinearRegressionFitter[Tuple[int, int]],
     reg1: float,
     reg2: float,
     l2reg: float,
     theta_exp: list[float],
-):
+) -> None:
     graphs, nodes_data = get_data(reg1=reg1, reg2=reg2, m=m, n=3)
     theta = fitter.fit(nodes_data=nodes_data, graphs=graphs, l2_reg=l2reg, m=m)
     theta_exp_df = pd.DataFrame(
