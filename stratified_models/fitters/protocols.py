@@ -1,10 +1,11 @@
 from dataclasses import dataclass
-from typing import Protocol, TypeAlias, TypeVar
+from typing import Protocol, TypeVar
 
 import networkx as nx
 import numpy as np
 import numpy.typing as npt
 import pandas as pd
+from typing_extensions import TypeAlias
 
 Node = TypeVar("Node")
 Theta: TypeAlias = pd.DataFrame

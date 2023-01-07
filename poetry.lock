@@ -189,7 +189,7 @@ reports = ["lxml"]
 name = "mypy-extensions"
 version = "0.4.3"
 description = "Experimental type system extensions for programs checked with the mypy typechecker."
-category = "main"
+category = "dev"
 optional = false
 python-versions = "*"
 
@@ -455,14 +455,14 @@ test = ["mypy", "pytest", "typing-extensions"]
 name = "typing-extensions"
 version = "4.4.0"
 description = "Backported and Experimental Type Hints for Python 3.7+"
-category = "dev"
+category = "main"
 optional = false
 python-versions = ">=3.7"
 
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.9"
-content-hash = "67b0b126b82cdc540d70f6cf8d45fe8d4fc03422337779c9f0c0422c25ea8b8c"
+content-hash = "23322a08e799541db72e6892d46b4f52e3817259b7f26def2b2a2ecb7313fabc"
 
 [metadata.files]
 attrs = [
