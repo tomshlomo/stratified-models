@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from stratified_models.fitters.admm_fitter import ADMMFitter
 from stratified_models.fitters.cg_fitter import CGFitter
 from stratified_models.fitters.cvxpy_fitter import CVXPYFitter
 from stratified_models.fitters.direct_fitter import DirectFitter
@@ -56,6 +57,7 @@ params = [
     (1e-10, 1e-10, 1e-6, [-3, 0, 0, 0, 0, 1]),
 ]
 fitters = [
+    ADMMFitter(),
     CGFitter(),
     DirectFitter(),
     CVXPYFitter(),

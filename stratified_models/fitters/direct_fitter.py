@@ -45,11 +45,14 @@ class DirectFitter:
         km = k * m
         a = scipy.sparse.eye(km, format="csr") * l2_reg
         xy = np.zeros(km)
-        node2index = {node: i for i, node in enumerate(graph.nodes)}
-        for node, node_data in nodes_data.items():
-            i = node2index[node]
+        for i, node_data in (
+            (i, nodes_data[node])
+            for i, node in enumerate(graph.nodes)
+            if node in nodes_data
+        ):
             sl = slice(i * m, (i + 1) * m)
             a[sl, sl] += node_data.x.T @ node_data.x
+            # diags.a
             xy[sl] = node_data.x.T @ node_data.y
         laplacian = nx.laplacian_matrix(graph, weight=LAPLACE_REG_PARAM_KEY)
         laplacian = scipy.sparse.kron(laplacian, scipy.sparse.eye(m))

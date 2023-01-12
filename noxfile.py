@@ -1,10 +1,11 @@
 from nox_poetry import Session, session
 
-python_versions = ["3.9", "3.10", "3.11"]
+latest_python_version = "3.11"
+old_python_versions = ["3.9", "3.10"]
 
 
-@session(python=python_versions)  # type: ignore[misc]
-def tests(session: Session) -> None:
+@session(python=latest_python_version)  # type: ignore[misc]
+def tests_with_coverage(session: Session) -> None:
     args = session.posargs or ["--cov"]
     session.run("pip", "install", "cvxpy~=1.3.0")
     session.run("poetry", "install", "--no-dev", external=True)
@@ -12,24 +13,33 @@ def tests(session: Session) -> None:
     session.run("pytest", *args)
 
 
+@session(python=old_python_versions)  # type: ignore[misc]
+def tests(session: Session) -> None:
+    args = session.posargs
+    session.run("pip", "install", "cvxpy~=1.3.0")
+    session.run("poetry", "install", "--no-dev", external=True)
+    session.install("pytest", "pytest-mock")
+    session.run("pytest", *args)
+
+
 locations = "stratified_models", "noxfile.py"
 
 
-@session(python="3.11")  # type: ignore[misc]
+@session(python=latest_python_version)  # type: ignore[misc]
 def lint(session: Session) -> None:
     args = session.posargs or locations
     session.install("flake8")
     session.run("flake8", *args)
 
 
-@session(python="3.11")  # type: ignore[misc]
+@session(python=latest_python_version)  # type: ignore[misc]
 def black(session: Session) -> None:
     args = session.posargs or locations
     session.install("black")
     session.run("black", "--diff", "--color", *args)
 
 
-@session(python="3.11")  # type: ignore[misc]
+@session(python=latest_python_version)  # type: ignore[misc]
 def mypy(session: Session) -> None:
     args = session.posargs or locations
     session.run("pip", "install", "cvxpy~=1.3.0")
@@ -42,7 +52,7 @@ def mypy(session: Session) -> None:
 package = "stratified_models"
 
 
-@session(python="3.11")  # type: ignore[misc]
+@session(python=latest_python_version)  # type: ignore[misc]
 def typeguard(session: Session) -> None:
     args = session.posargs or []
     session.run("pip", "install", "cvxpy~=1.3.0")
