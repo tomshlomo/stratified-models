@@ -11,21 +11,29 @@ from stratified_models.fitters.cg_fitter import CGFitter
 from stratified_models.fitters.cvxpy_fitter import CVXPYFitter
 from stratified_models.fitters.direct_fitter import DirectFitter
 from stratified_models.fitters.protocols import (
-    LAPLACE_REG_PARAM_KEY,
     NodeData,
     StratifiedLinearRegressionFitter,
 )
+from stratified_models.regularization_graph.cartesian_product import (
+    CartesianProductOfGraphs,
+)
+from stratified_models.regularization_graph.networkx_graph import (
+    NetworkXRegularizationGraph,
+)
+from stratified_models.regularization_graph.regularization_graph import Name
 
 
 def get_data(
     reg1: float, reg2: float, m: int, n: int
-) -> Tuple[dict[str, nx.Graph], dict[Tuple[int, int], NodeData]]:
-    graphs = {
-        "1": nx.path_graph(2),
-        "2": nx.path_graph(3),
-    }
-    nx.set_edge_attributes(graphs["1"], reg1, LAPLACE_REG_PARAM_KEY)
-    nx.set_edge_attributes(graphs["2"], reg2, LAPLACE_REG_PARAM_KEY)
+) -> Tuple[nx.Graph, nx.Graph, NodeData]:
+    graph1 = nx.path_graph(2)
+    graph2 = nx.path_graph(3)
+    nx.set_edge_attributes(
+        graph1, reg1, NetworkXRegularizationGraph.LAPLACE_REG_PARAM_KEY
+    )
+    nx.set_edge_attributes(
+        graph2, reg2, NetworkXRegularizationGraph.LAPLACE_REG_PARAM_KEY
+    )
 
     x = (
         np.power.outer(np.arange(n), np.arange(m))
@@ -42,7 +50,7 @@ def get_data(
             y=x @ np.ones(m) * -3,
         ),
     }
-    return graphs, nodes_data
+    return graph1, graph2, nodes_data
 
 
 m_s = [
@@ -70,16 +78,20 @@ fitters = [
 )
 def test_fit(
     m: int,
-    fitter: StratifiedLinearRegressionFitter[Tuple[int, int]],
+    fitter: StratifiedLinearRegressionFitter[Tuple[int, int], Name],
     reg1: float,
     reg2: float,
     l2reg: float,
     theta_exp: list[float],
 ) -> None:
-    graphs, nodes_data = get_data(reg1=reg1, reg2=reg2, m=m, n=3)
-    theta = fitter.fit(nodes_data=nodes_data, graphs=graphs, l2_reg=l2reg, m=m)
-    theta_exp_df = pd.DataFrame(
-        np.tile(theta_exp, (m, 1)),
-        columns=pd.MultiIndex.from_product([range(2), range(3)], names=graphs.keys()),
-    ).T
+    graph1, graph2, nodes_data = get_data(reg1=reg1, reg2=reg2, m=m, n=3)
+    graph = CartesianProductOfGraphs(
+        NetworkXRegularizationGraph(graph1, "1"),
+        NetworkXRegularizationGraph(graph2, "2"),
+    )
+    # graph = NetworkXRegularizationGraph(
+    #     graph=cartesian_product(graphs.values()), names=graphs.keys()
+    # )
+    theta = fitter.fit(nodes_data=nodes_data, graph=graph, l2_reg=l2reg, m=m)
+    theta_exp_df = pd.DataFrame(np.tile(theta_exp, (m, 1)), columns=graph.nodes()).T
     assert ((theta - theta_exp_df).abs() < 1e-3).all().all()

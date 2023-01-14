@@ -3,19 +3,15 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional, Tuple
 
-import networkx as nx
 import numpy as np
 import numpy.typing as npt
 import pandas as pd
 import scipy
 
-from stratified_models.fitters.protocols import (
-    LAPLACE_REG_PARAM_KEY,
-    Node,
-    NodeData,
-    Theta,
+from stratified_models.fitters.protocols import Node, NodeData, Theta
+from stratified_models.regularization_graph.regularization_graph import (
+    RegularizationGraph,
 )
-from stratified_models.utils.networkx_utils import cartesian_product
 
 """
 cost(theta) = sum_k f_k(theta_k) + laplacian(theta)
@@ -100,18 +96,15 @@ class ADMMFitter:
     def fit(
         self,
         nodes_data: dict[Node, NodeData],
-        graphs: dict[str, nx.Graph],
+        graph: RegularizationGraph,
+        # graphs: dict[str, nx.Graph],
         l2_reg: float,
         m: int,
     ) -> Theta:
-        graph = cartesian_product(graphs.values())
+        # graph = cartesian_product(graphs.values())
         k = graph.number_of_nodes()
         instance = QuadraticStratifiedProblem.from_data(
-            nodes_data=[
-                (i, nodes_data[node])
-                for i, node in enumerate(graph.nodes)
-                if node in nodes_data
-            ],
+            nodes_data=nodes_data,
             graph=graph,
             l2_reg=l2_reg,
             m=m,
@@ -132,7 +125,7 @@ class ADMMFitter:
 
         theta_df = pd.DataFrame(  # todo: should be a common function
             theta,
-            index=pd.MultiIndex.from_tuples(graph.nodes, names=graphs.keys()),
+            index=graph.nodes(),
         )
         return theta_df
 
@@ -172,8 +165,8 @@ class QuadraticStratifiedProblem:  # todo:rename.
     @classmethod
     def from_data(
         cls,
-        nodes_data: list[Tuple[int, NodeData]],
-        graph: nx.Graph,
+        nodes_data: dict[Node, NodeData],
+        graph: RegularizationGraph[Node],
         l2_reg: float,
         m: int,
     ) -> QuadraticStratifiedProblem:
@@ -181,11 +174,12 @@ class QuadraticStratifiedProblem:  # todo:rename.
         q = np.tile(np.eye(m) * l2_reg, (k, 1, 1))
         xy = np.zeros((k, m))
         d = 0.0
-        for i, node_data in nodes_data:
+        for node, node_data in nodes_data.items():
+            i = graph.get_node_index(node)
             q[i] += node_data.x.T @ node_data.x
             xy[i] = node_data.x.T @ node_data.y
             d += float(node_data.y @ node_data.y)
-        laplacian = nx.laplacian_matrix(graph, weight=LAPLACE_REG_PARAM_KEY)
+        laplacian = graph.laplacian_matrix()
         return QuadraticStratifiedProblem(q=q, c=xy, d=d, laplacian=laplacian)
 
     def prox_f(self, v: npt.NDArray[np.float64], rho: float) -> npt.NDArray[np.float64]:

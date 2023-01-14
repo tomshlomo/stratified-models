@@ -1,43 +1,39 @@
 from typing import Tuple
 
-import networkx as nx
 import numpy as np
 import numpy.typing as npt
 import pandas as pd
 import scipy
 
-from stratified_models.fitters.protocols import (
-    LAPLACE_REG_PARAM_KEY,
-    Node,
-    NodeData,
-    Theta,
+from stratified_models.fitters.protocols import Node, NodeData, Theta
+from stratified_models.regularization_graph.regularization_graph import (
+    Name,
+    RegularizationGraph,
 )
-from stratified_models.utils.networkx_utils import cartesian_product
 
 
 class DirectFitter:
     def fit(
         self,
         nodes_data: dict[Node, NodeData],
-        graphs: dict[str, nx.Graph],
+        graph: RegularizationGraph[Node, Name],
         l2_reg: float,
         m: int,
     ) -> Theta:
-        graph = cartesian_product(graphs.values())
         a, xy = self._build_lin_problem(
             nodes_data=nodes_data, graph=graph, l2_reg=l2_reg, m=m
         )
         theta = scipy.sparse.linalg.spsolve(a, xy)
         theta_df = pd.DataFrame(
             theta.reshape((-1, m)),
-            index=pd.MultiIndex.from_tuples(graph.nodes, names=graphs.keys()),
+            index=graph.nodes(),
         )
         return theta_df
 
     def _build_lin_problem(
         self,
         nodes_data: dict[Node, NodeData],
-        graph: nx.Graph,
+        graph: RegularizationGraph[Node, Name],
         l2_reg: float,
         m: int,
     ) -> Tuple[scipy.sparse.csr_matrix, npt.NDArray[np.float64]]:
@@ -45,16 +41,13 @@ class DirectFitter:
         km = k * m
         a = scipy.sparse.eye(km, format="csr") * l2_reg
         xy = np.zeros(km)
-        for i, node_data in (
-            (i, nodes_data[node])
-            for i, node in enumerate(graph.nodes)
-            if node in nodes_data
-        ):
+        for node, node_data in nodes_data.items():
+            i = graph.get_node_index(node)
             sl = slice(i * m, (i + 1) * m)
             a[sl, sl] += node_data.x.T @ node_data.x
             # diags.a
             xy[sl] = node_data.x.T @ node_data.y
-        laplacian = nx.laplacian_matrix(graph, weight=LAPLACE_REG_PARAM_KEY)
+        laplacian = graph.laplacian_matrix()
         laplacian = scipy.sparse.kron(laplacian, scipy.sparse.eye(m))
         a += laplacian
         return a, xy

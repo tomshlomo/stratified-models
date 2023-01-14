@@ -1,15 +1,18 @@
 from dataclasses import dataclass
-from typing import Protocol, TypeVar
+from typing import Protocol
 
-import networkx as nx
 import numpy as np
 import numpy.typing as npt
 import pandas as pd
 from typing_extensions import TypeAlias
 
-Node = TypeVar("Node")
+from stratified_models.regularization_graph.regularization_graph import (
+    Name,
+    Node,
+    RegularizationGraph,
+)
+
 Theta: TypeAlias = pd.DataFrame
-LAPLACE_REG_PARAM_KEY = "laplace_reg_param"
 
 
 @dataclass
@@ -18,11 +21,11 @@ class NodeData:
     y: npt.NDArray[np.float64]
 
 
-class StratifiedLinearRegressionFitter(Protocol[Node]):  # pragma: no cover
+class StratifiedLinearRegressionFitter(Protocol[Node, Name]):  # pragma: no cover
     def fit(
         self,
         nodes_data: dict[Node, NodeData],
-        graphs: dict[str, nx.Graph],
+        graph: RegularizationGraph[Node, Name],
         l2_reg: float,
         m: int,
     ) -> Theta:

@@ -1,21 +1,18 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional, Tuple
+from typing import Optional
 
-import networkx as nx
 import numpy as np
 import numpy.typing as npt
 import pandas as pd
 import scipy
 
-from stratified_models.fitters.protocols import (
-    LAPLACE_REG_PARAM_KEY,
-    Node,
-    NodeData,
-    Theta,
+from stratified_models.fitters.protocols import Node, NodeData, Theta
+from stratified_models.regularization_graph.regularization_graph import (
+    Name,
+    RegularizationGraph,
 )
-from stratified_models.utils.networkx_utils import cartesian_product
 
 
 @dataclass
@@ -26,25 +23,18 @@ class CGFitter:
     def fit(
         self,
         nodes_data: dict[Node, NodeData],
-        graphs: dict[str, nx.Graph],
+        graph: RegularizationGraph[Node],
         l2_reg: float,
         m: int,
     ) -> Theta:
-        graph = cartesian_product(graphs.values())
-        indexed_nodes_data = [
-            (i, nodes_data[node])
-            for i, node in enumerate(graph.nodes)
-            if node in nodes_data
-        ]
-
         a = LinearOperator.from_data(
-            nodes_data=indexed_nodes_data,
+            nodes_data=nodes_data,
             graph=graph,
             l2_reg=l2_reg,
             m=m,
         )
         xy = self._build_xy(
-            nodes_data=indexed_nodes_data,
+            nodes_data=nodes_data,
             graph=graph,
             m=m,
         )
@@ -53,19 +43,20 @@ class CGFitter:
         )
         theta_df = pd.DataFrame(  # todo: should be a common function
             theta.reshape((-1, m)),
-            index=pd.MultiIndex.from_tuples(graph.nodes, names=graphs.keys()),
+            index=graph.nodes(),
         )
         return theta_df
 
     def _build_xy(
         self,
-        nodes_data: list[Tuple[int, NodeData]],
-        graph: nx.Graph,
+        nodes_data: dict[Node, NodeData],
+        graph: RegularizationGraph[Node],
         m: int,
     ) -> npt.NDArray[np.float64]:
         k = graph.number_of_nodes()
         xy = np.zeros((k, m))
-        for i, node_data in nodes_data:
+        for node, node_data in nodes_data.items():
+            i = graph.get_node_index(node)
             xy[i] = node_data.x.T @ node_data.y
         return xy
 
@@ -84,18 +75,19 @@ class LinearOperator(scipy.sparse.linalg.LinearOperator):  # type:ignore[misc]
     @classmethod
     def from_data(
         cls,
-        nodes_data: list[Tuple[int, NodeData]],
-        graph: nx.Graph,
+        nodes_data: dict[Node, NodeData],
+        graph: RegularizationGraph[Node, Name],
         l2_reg: float,
         m: int,
     ) -> LinearOperator:
         k = graph.number_of_nodes()
         q = np.tile(np.eye(m) * l2_reg, (k, 1, 1))
         xy = np.zeros((k, m))
-        for i, node_data in nodes_data:
+        for node, node_data in nodes_data.items():
+            i = graph.get_node_index(node)
             q[i] += node_data.x.T @ node_data.x
             xy[i] = node_data.x.T @ node_data.y
-        laplacian = nx.laplacian_matrix(graph, weight=LAPLACE_REG_PARAM_KEY)
+        laplacian = graph.laplacian_matrix()
         return LinearOperator(q=q, laplacian=laplacian)
 
     def _matvec(self, x: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
