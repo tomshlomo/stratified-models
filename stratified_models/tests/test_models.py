@@ -11,8 +11,10 @@ from stratified_models.fitters.cg_fitter import CGFitter
 from stratified_models.fitters.cvxpy_fitter import CVXPYFitter
 from stratified_models.fitters.direct_fitter import DirectFitter
 from stratified_models.fitters.protocols import (
+    Costs,
     NodeData,
     StratifiedLinearRegressionFitter,
+    StratifiedLinearRegressionProblem,
 )
 from stratified_models.regularization_graph.cartesian_product import (
     CartesianProductOfGraphs,
@@ -20,12 +22,11 @@ from stratified_models.regularization_graph.cartesian_product import (
 from stratified_models.regularization_graph.networkx_graph import (
     NetworkXRegularizationGraph,
 )
-from stratified_models.regularization_graph.regularization_graph import Name
 
 
 def get_data(
     reg1: float, reg2: float, m: int, n: int
-) -> Tuple[nx.Graph, nx.Graph, NodeData]:
+) -> Tuple[nx.Graph, nx.Graph, dict[Tuple[int, int], NodeData],]:
     graph1 = nx.path_graph(2)
     graph2 = nx.path_graph(3)
     nx.set_edge_attributes(
@@ -58,17 +59,18 @@ m_s = [
     1,
 ]
 params = [
+    (1, 1, 1, None),
+    (1e6, 1e6, 1e-10, [-1, -1, -1, -1, -1, -1]),
     (1.0, 0.0, 1e-6, [-3, 0, 1, -3, 0, 1]),
     (1e-10, 1e-10, 1e10, [0, 0, 0, 0, 0, 0]),
-    (1e6, 1e6, 1e-10, [-1, -1, -1, -1, -1, -1]),
     (0.0, 1.0, 1e-6, [-3, -3, -3, 1, 1, 1]),
     (1e-10, 1e-10, 1e-6, [-3, 0, 0, 0, 0, 1]),
 ]
 fitters = [
-    ADMMFitter(),
-    CGFitter(),
     DirectFitter(),
+    CGFitter(),
     CVXPYFitter(),
+    ADMMFitter(),
 ]
 
 
@@ -78,20 +80,29 @@ fitters = [
 )
 def test_fit(
     m: int,
-    fitter: StratifiedLinearRegressionFitter[Tuple[int, int], Name],
+    fitter: StratifiedLinearRegressionFitter[Tuple[int, int]],
     reg1: float,
     reg2: float,
     l2reg: float,
     theta_exp: list[float],
 ) -> None:
     graph1, graph2, nodes_data = get_data(reg1=reg1, reg2=reg2, m=m, n=3)
-    graph = CartesianProductOfGraphs(
+    graph: CartesianProductOfGraphs[int, int] = CartesianProductOfGraphs(
         NetworkXRegularizationGraph(graph1, "1"),
         NetworkXRegularizationGraph(graph2, "2"),
     )
-    # graph = NetworkXRegularizationGraph(
-    #     graph=cartesian_product(graphs.values()), names=graphs.keys()
-    # )
-    theta = fitter.fit(nodes_data=nodes_data, graph=graph, l2_reg=l2reg, m=m)
-    theta_exp_df = pd.DataFrame(np.tile(theta_exp, (m, 1)), columns=graph.nodes()).T
-    assert ((theta - theta_exp_df).abs() < 1e-3).all().all()
+    problem = StratifiedLinearRegressionProblem(
+        nodes_data=nodes_data,
+        graph=graph,
+        l2_reg=l2reg,
+        m=m,
+    )
+    theta, cost = fitter.fit(problem)
+    costs_exp = Costs.from_problem_and_theta(problem, theta)
+    assert abs(cost - costs_exp.total()) < costs_exp.total() * 1e-3
+    if theta_exp:
+        theta_exp_df = pd.DataFrame(
+            np.tile(theta_exp, (m, 1)),
+            columns=graph.nodes,
+        ).T
+        assert ((theta.df - theta_exp_df).abs() < 1e-3).all().all()

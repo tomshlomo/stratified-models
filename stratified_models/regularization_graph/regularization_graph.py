@@ -1,57 +1,41 @@
-from abc import ABC, abstractmethod
-from typing import Generic, TypeVar
+from abc import abstractmethod
+from typing import Generic, Tuple, TypeVar, Union
 
 import numpy as np
 import numpy.typing as npt
 import pandas as pd
 import scipy
-from pandas.core.indexes.frozen import FrozenList
 
 Node = TypeVar("Node")
-Name = TypeVar("Name")
+Name = Union[str, Tuple["Name", "Name"]]
 
 
-class RegularizationGraph(Generic[Node, Name]):
-    def __init__(self, name: Name):
-        self.name = name
+class RegularizationGraph(Generic[Node]):
+    def __init__(self, nodes: pd.Index):
+        self.nodes = nodes
 
-    @abstractmethod
-    def nodes(self) -> pd.Index:
-        pass
-
-    @abstractmethod
     def get_node_index(self, node: Node) -> int:
-        pass
+        return self.nodes.get_loc(node)  # type:ignore[no-any-return]
 
-    @abstractmethod
     def number_of_nodes(self) -> int:
+        return self.nodes.shape[0]  # type:ignore[no-any-return]
+
+    def name(self) -> Name:
+        return self.nodes.name  # type:ignore[no-any-return]
+
+    @abstractmethod
+    def laplacian_matrix(self) -> scipy.sparse.spmatrix:
         pass
 
     @abstractmethod
-    def laplacian_matrix(self) -> scipy.sparse.csr_matrix:
+    def laplacian_mult(self, x: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
         pass
+
+    def laplacian_quad_form(self, x: npt.NDArray[np.float64]) -> float:
+        return x.ravel() @ self.laplacian_mult(x).ravel()
 
     @abstractmethod
     def laplacian_prox(
         self, v: npt.NDArray[np.float64], rho: float
     ) -> npt.NDArray[np.float64]:
         pass
-
-
-# todo: remove the above and leave only this implementation
-class RegularizationGraphWithCachedNodes(
-    RegularizationGraph[Node, FrozenList[Name]],
-    ABC,
-):
-    def __init__(self, nodes: pd.Index):
-        super().__init__(name=nodes.names)
-        self._nodes = nodes
-
-    def get_node_index(self, node: Node) -> int:
-        return self._nodes.get_loc(node)
-
-    def nodes(self) -> pd.Index:
-        return self._nodes
-
-    def number_of_nodes(self) -> int:
-        return self._nodes.shape[0]

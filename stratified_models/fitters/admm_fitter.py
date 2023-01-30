@@ -1,15 +1,20 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional, Tuple
+from time import time
+from typing import Tuple
 
 import numpy as np
 import numpy.typing as npt
 import pandas as pd
-import scipy
 
-from stratified_models.fitters.protocols import Node, NodeData, Theta
+from stratified_models.fitters.protocols import (
+    Costs,
+    StratifiedLinearRegressionProblem,
+    Theta,
+)
 from stratified_models.regularization_graph.regularization_graph import (
+    Node,
     RegularizationGraph,
 )
 
@@ -24,7 +29,7 @@ c_k = x_k' y_k
 d_k = |y_k|^2
 
 
-laplacian(theta) = tr(theta' L theta) / 2
+laplacian(theta) = tr(theta' L theta)
 
 ADMM:
 first, rewrite as:
@@ -68,16 +73,16 @@ theta_k = (q_k + rho/2 * I)^-1  (rho/2 * v + c_k)
 argmin_theta_tilde laplacian(theta_tilde) + rho/2 |theta_tilde - theta - y_k * t|^2
 =prox_tl(theta + u)
 
-since laplacian(theta_tilde) = tr(theta' L theta)/2, we have that:
+since laplacian(theta_tilde) = tr(theta' L theta), we have that:
 prox_tl (v) = argmin_theta_tilde (
-tr(theta_tilde' L theta_tilde)/2
+tr(theta_tilde' L theta_tilde)
 + rho/2 |theta_tilde - v|^2
 )
 taking the gradient=0 gives:
-L theta_tilde + rho (theta_tilde - v) = 0
-(L + rho * I) theta_tilde = rho * v
-theta_tilde = (L + rho * I)^-1 rho * v
-            = (tL + I)^-1 v
+2 L theta_tilde + rho (theta_tilde - v) = 0
+(2 L + rho * I) theta_tilde = rho * v
+theta_tilde = (2L + rho * I)^-1 rho * v
+            = (2tL + I)^-1 v
 
 
 (3) can be written as:
@@ -95,39 +100,76 @@ class ADMMFitter:
 
     def fit(
         self,
-        nodes_data: dict[Node, NodeData],
-        graph: RegularizationGraph,
-        # graphs: dict[str, nx.Graph],
-        l2_reg: float,
-        m: int,
-    ) -> Theta:
-        # graph = cartesian_product(graphs.values())
-        k = graph.number_of_nodes()
-        instance = QuadraticStratifiedProblem.from_data(
-            nodes_data=nodes_data,
-            graph=graph,
-            l2_reg=l2_reg,
-            m=m,
-        )
+        problem: StratifiedLinearRegressionProblem[Node],
+    ) -> tuple[Theta[Node], Costs]:
+        start = time()
+        k = problem.graph.number_of_nodes()
+        m = problem.m
+        instance = QuadraticStratifiedProblem.from_data(problem=problem)
         u = np.zeros((k, m))
         theta = np.zeros((k, m))
         theta_tilde = np.zeros((k, m))
-        rho = 1.0
+        delta = np.sum(instance.laplacian.diagonal()) / (k * m)
+        lambda_min = np.min(instance._q_eig_cache[0])
+        lambda_max = np.max(instance._q_eig_cache[0])
+        if delta < lambda_min:
+            rho = np.sqrt(lambda_min * delta)
+        elif delta > lambda_max:
+            rho = np.sqrt(lambda_max * delta)
+        else:
+            rho = delta
         cost = np.zeros((self.max_iter + 1, 2))
         cost[0, 0] = instance.eval(theta)
         cost[0, 1] = instance.eval(theta_tilde)
+        best_cost = np.min(cost[0])
+        best_theta = theta
+        print(
+            f"{'i':<3} | {'is_new_best':<15} {'best_cost':<15} {'d_cost0':<15} "
+            f"{'d_cost1':<15} {'rho':<15} {'dual_norm':<15} {'primal_norm':<15} "
+            f"time"
+        )
         for i in range(1, self.max_iter + 1):
             theta = instance.prox_f(theta_tilde - u, rho)
+            dual_residual = theta - theta_tilde
             theta_tilde = instance.prox_l(theta + u, rho)
-            u += theta - theta_tilde
+            primal_residual = theta - theta_tilde
+            u += primal_residual
+
             cost[i, 0] = instance.eval(theta)
             cost[i, 1] = instance.eval(theta_tilde)
+            is_new_best = False
+            if cost[i, 0] < best_cost and cost[i, 0] < cost[i, 1]:
+                best_cost = cost[i, 0]
+                best_theta = theta
+                is_new_best = True
+            elif cost[i, 1] < best_cost:
+                best_cost = cost[i, 1]
+                best_theta = theta_tilde
+                is_new_best = True
+
+            dual_residual_norm = np.linalg.norm(dual_residual.ravel()) * rho
+            primal_residual_norm = np.linalg.norm(primal_residual.ravel())
+
+            print(
+                f"{i:<3d} | {is_new_best:<15} {best_cost:<15.3e} "
+                f"{cost[i, 0] - best_cost:<15.3e} "
+                f"{cost[i, 1] - best_cost:<15.3e} "
+                f"{rho:<15.3e} {dual_residual_norm:<15.3e} "
+                f"{primal_residual_norm:<15.3e} {time() - start:4.3f}"
+            )
+
+            if primal_residual_norm > 5 * dual_residual_norm:
+                rho *= 2
+                u /= 2
+            elif dual_residual_norm > 5 * primal_residual_norm:
+                rho /= 2
+                u *= 2
 
         theta_df = pd.DataFrame(  # todo: should be a common function
-            theta,
-            index=graph.nodes(),
+            best_theta,
+            index=problem.graph.nodes,
         )
-        return theta_df
+        return Theta(df=theta_df), best_cost
 
 
 class QuadraticStratifiedProblem:  # todo:rename.
@@ -136,19 +178,17 @@ class QuadraticStratifiedProblem:  # todo:rename.
         q: npt.NDArray[np.float64],  # k, m, m
         c: npt.NDArray[np.float64],  # k, m
         d: float,
-        laplacian: scipy.sparse.csr_matrix,  # k, k
+        graph: RegularizationGraph[Node],  # k, k
     ) -> None:
         self.q = q
         self.c = c
         self.d = d
-        self.laplacian = laplacian
+        self.graph = graph
+        self.laplacian = graph.laplacian_matrix()
         self.k, self.m, _ = q.shape
-        self._q_eig_cache: Optional[
-            Tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]
-        ] = None
-        self._l_eig_cache: Optional[
-            Tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]
-        ] = None
+        self._q_eig_cache: Tuple[
+            npt.NDArray[np.float64], npt.NDArray[np.float64]
+        ] = np.linalg.eigh(self.q)
 
     def eval(self, theta: npt.NDArray[np.float64]) -> float:
         """
@@ -156,8 +196,15 @@ class QuadraticStratifiedProblem:  # todo:rename.
         +
         tr(theta' L theta) / 2
         """
+        # z = self.d
+        # for kk in range(self.k):
+        #     z += theta[kk].T @ self.q[kk] @ theta[kk].T - 2 * self.c[kk].T @ theta[kk]
+        # z += np.sum(theta * (self.laplacian @ theta)) / 2
+
         q_theta = np.einsum("kim,ki->km", self.q, theta)
-        q_theta_plus_lx = q_theta + self.laplacian @ theta / 2
+        q_theta_plus_lx = q_theta + self.laplacian @ theta
+        # todo: implement a laplacian_mult method on RegularizaionGraph,
+        #  and remove laplacian from object
         return (  # type:ignore[no-any-return]
             theta.ravel() @ (-2 * self.c + q_theta_plus_lx).ravel() + self.d
         )
@@ -165,51 +212,43 @@ class QuadraticStratifiedProblem:  # todo:rename.
     @classmethod
     def from_data(
         cls,
-        nodes_data: dict[Node, NodeData],
-        graph: RegularizationGraph[Node],
-        l2_reg: float,
-        m: int,
+        problem: StratifiedLinearRegressionProblem[Node],
     ) -> QuadraticStratifiedProblem:
-        k = graph.number_of_nodes()
-        q = np.tile(np.eye(m) * l2_reg, (k, 1, 1))
+        k = problem.graph.number_of_nodes()
+        m = problem.m
+        q = np.tile(np.eye(m) * problem.l2_reg, (k, 1, 1))
         xy = np.zeros((k, m))
         d = 0.0
-        for node, node_data in nodes_data.items():
-            i = graph.get_node_index(node)
+        for node, node_data in problem.nodes_data.items():
+            i = problem.graph.get_node_index(node)
             q[i] += node_data.x.T @ node_data.x
             xy[i] = node_data.x.T @ node_data.y
             d += float(node_data.y @ node_data.y)
-        laplacian = graph.laplacian_matrix()
-        return QuadraticStratifiedProblem(q=q, c=xy, d=d, laplacian=laplacian)
+        return QuadraticStratifiedProblem(q=q, c=xy, d=d, graph=problem.graph)
 
     def prox_f(self, v: npt.NDArray[np.float64], rho: float) -> npt.NDArray[np.float64]:
         """
+        min x'qx -2c'x + rho/2|x-v|^2
+        2qx - 2c + rho (x-v) = 0
+        qx - c + rho/2 (x-v) = 0
+        (q + rho/2 I) x = c + rho/2 v
+        x = (q + rho/2 I)^-1 (c + rho/2 v)
+
         let let uk w_k u_k' = q_k, then:
         theta_k = (q_k + rho/2 * I)^-1  (rho/2 * v + c_k)
-        = u_k (w_k + rho/2 I) u_k' (rho/2 * v + c_k)
+        = u_k (w_k + rho/2 I)^-1 u_k' (rho/2 * v + c_k)
         """
         hrho = rho / 2
         b = hrho * v + self.c
-        if self._q_eig_cache is None:
-            self._q_eig_cache = np.linalg.eigh(self.q)
         w, u = self._q_eig_cache
         d = 1 / (w + hrho)
         # todo: cache optimal einstein path
-        return np.einsum("kmi,ki,kpi,kp->km", u, d, u, b)  # type:ignore[no-any-return]
+        # z = np.zeros((self.k, self.m))
+        # for kk in range(self.k):
+        #     z[kk] = u[kk] @ np.diag(d[kk]) @ u[kk].T @ b[kk]
+        return np.einsum(
+            "kmi,ki,kpi,kp->km", u, d, u, b, optimize="optimal"
+        )  # type:ignore[no-any-return]
 
     def prox_l(self, v: npt.NDArray[np.float64], rho: float) -> npt.NDArray[np.float64]:
-        """
-        (laplacian / rho + I)^-1 v =
-        u (1 + w/rho)^-1 u' v
-        :param v:
-        :param rho:
-        :return:
-        """
-        if self._l_eig_cache is None:
-            self._l_eig_cache = np.linalg.eigh(
-                self.laplacian.toarray()
-            )  # type:ignore[assignment]
-        w, u = self._l_eig_cache  # type:ignore[misc]
-        d = 1 / (1 + w / rho)
-        # todo: cache optimal einstein path
-        return np.einsum("mi,i,pi,pj->mj", u, d, u, v)  # type:ignore[no-any-return]
+        return self.graph.laplacian_prox(v, rho)

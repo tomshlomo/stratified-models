@@ -1,4 +1,6 @@
-from typing import Tuple, TypeVar
+from __future__ import annotations
+
+from typing import Tuple, TypeVar, Union
 
 import numpy as np
 import pandas as pd
@@ -6,37 +8,50 @@ import scipy
 from numpy import typing as npt
 
 from stratified_models.regularization_graph.regularization_graph import (
+    Node,
     RegularizationGraph,
-    RegularizationGraphWithCachedNodes,
 )
 
 Node1 = TypeVar("Node1")
 Node2 = TypeVar("Node2")
-Name1 = TypeVar("Name1")
-Name2 = TypeVar("Name2")
+
+NestedNode = Union[Node, Tuple["NestedNode", Node]]
 
 
-class CartesianProductOfGraphs(
-    RegularizationGraphWithCachedNodes[Tuple[Node1, Node2], Tuple[Name1, Name2]]
-):
+class CartesianProductOfGraphs(RegularizationGraph[Tuple[Node1, Node2]]):
     def __init__(
         self,
-        graph1: RegularizationGraph[Node1, Name1],
-        graph2: RegularizationGraph[Node2, Name2],
+        graph1: RegularizationGraph[Node1],
+        graph2: RegularizationGraph[Node2],
     ) -> None:
-        super().__init__(
-            nodes=pd.MultiIndex.from_product(
-                [graph1.nodes(), graph2.nodes()],
-                names=[graph1.name, graph2.name],
-            )
-        )
+        nodes = pd.MultiIndex.from_product([graph1.nodes, graph2.nodes])
+        nodes = nodes.to_flat_index()
+        nodes.name = (graph1.name(), graph2.name())
+        super().__init__(nodes=nodes)
         self.graph1 = graph1
         self.graph2 = graph2
 
-    def laplacian_matrix(self) -> scipy.sparse.csr_matrix:
+    def laplacian_matrix(self) -> scipy.sparse.spmatrix:
         lap1 = self.graph1.laplacian_matrix()
         lap2 = self.graph2.laplacian_matrix()
         return scipy.sparse.kronsum(lap2, lap1)
+
+    def laplacian_mult(self, x: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
+        """
+        (A*B is kron(A, B))
+        L x = (I * L2 + L1 * I) x
+        = (I * L2) x + (L1 * I) x
+        = vec( L2 mat(x) ) + vec( mat(x) L1 )
+        """
+        m = x.shape[-1]
+        k1 = self.graph1.number_of_nodes()
+        k2 = self.graph2.number_of_nodes()
+        x = x.reshape((k1, k2, m))
+        l1x = self.graph1.laplacian_mult(x.reshape((k1, -1))).reshape((k1, k2, m))
+        x = np.swapaxes(x, 0, 1)
+        l2x = self.graph2.laplacian_mult(x.reshape((k2, -1))).reshape((k2, k1, m))
+        l2x = np.swapaxes(l2x, 0, 1)
+        return (l1x + l2x).reshape((-1, m))
 
     def laplacian_prox(
         self, v: npt.NDArray[np.float64], rho: float
@@ -66,3 +81,13 @@ class CartesianProductOfGraphs(
         v = np.swapaxes(v.reshape((k2, k1, -1)), 0, 1).reshape((k1, -1))
         v = self.graph1.laplacian_prox(v, rho)
         return v.reshape((k, m))
+
+    @classmethod
+    def multi_product(
+        cls,
+        graphs: list[RegularizationGraph[Node]],
+    ) -> RegularizationGraph[Node] | CartesianProductOfGraphs[NestedNode, Node]:
+        graph = graphs[0]
+        for next_graph in graphs[1:]:
+            graph = CartesianProductOfGraphs(graph, next_graph)
+        return graph

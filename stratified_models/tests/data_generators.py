@@ -7,8 +7,12 @@ import pandas as pd
 import scipy
 
 from stratified_models.fitters.admm_fitter import ADMMFitter
-from stratified_models.fitters.protocols import LAPLACE_REG_PARAM_KEY, Theta
+from stratified_models.fitters.direct_fitter import DirectFitter
+from stratified_models.fitters.protocols import Costs
 from stratified_models.models import StratifiedLinearRegression
+from stratified_models.regularization_graph.networkx_graph import (
+    NetworkXRegularizationGraph,
+)
 from stratified_models.utils.networkx_utils import cartesian_product
 
 RNG = np.random.default_rng(42)
@@ -17,10 +21,10 @@ RNG = np.random.default_rng(42)
 @dataclass
 class DataGenerator:
     n: int = 100_000
-    m: int = 64
+    m: int = 10
     graphs: list[Tuple[nx.Graph, float]] = field(
         default_factory=lambda: [
-            (nx.cycle_graph(200), 0.9),
+            # (nx.cycle_graph(200), 0.9),
             (nx.path_graph(10), 0.5),
             (nx.path_graph(12), 0.1),
         ]
@@ -76,7 +80,7 @@ class DataGenerator:
             df[col] = RNG.integers(0, graph.number_of_nodes(), self.n)
         return df
 
-    def generate(self) -> Tuple[pd.DataFrame, pd.Series, Theta]:
+    def generate(self) -> Tuple[pd.DataFrame, pd.Series, pd.DataFrame]:
         theta = self.get_theta()
         df = self.get_df()
         y = self.get_y(df, theta)
@@ -86,11 +90,13 @@ class DataGenerator:
 if __name__ == "__main__":
     gen = DataGenerator()
     df, y, theta_true = gen.generate()
-    graphs = {}
+    graphs = []
     for (graph, weight), name in zip(gen.graphs, gen.stratification_features()):
         reg = 1 / (1 - weight)
-        nx.set_edge_attributes(graph, reg, LAPLACE_REG_PARAM_KEY)
-        graphs[name] = graph
+        nx.set_edge_attributes(
+            graph, reg, NetworkXRegularizationGraph.LAPLACE_REG_PARAM_KEY
+        )
+        graphs.append(NetworkXRegularizationGraph(graph, name))
     fitter = ADMMFitter()
     model = StratifiedLinearRegression(
         fitter=fitter,
@@ -99,3 +105,13 @@ if __name__ == "__main__":
         regression_columns=gen.regression_features(),
     )
     model.fit(df, y)
+    model2 = StratifiedLinearRegression(
+        fitter=DirectFitter(),
+        graphs=graphs,
+        l2_reg=100,
+        regression_columns=gen.regression_features(),
+    )
+    model2.fit(df, y)
+    cost = Costs.from_problem_and_theta(model.get_problem(df, y), model.theta)
+    cost2 = Costs.from_problem_and_theta(model.get_problem(df, y), model2.theta)
+    pass
