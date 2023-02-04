@@ -7,14 +7,15 @@ import pandas as pd
 import pytest
 
 from stratified_models.fitters.admm_fitter import ADMMFitter
+from stratified_models.fitters.admm_fitter2 import ADMMFitter2
 from stratified_models.fitters.cg_fitter import CGFitter
 from stratified_models.fitters.cvxpy_fitter import CVXPYFitter
 from stratified_models.fitters.direct_fitter import DirectFitter
 from stratified_models.fitters.protocols import (
     Costs,
     NodeData,
+    QuadraticStratifiedLinearRegressionProblem,
     StratifiedLinearRegressionFitter,
-    StratifiedLinearRegressionProblem,
 )
 from stratified_models.regularization_graph.cartesian_product import (
     CartesianProductOfGraphs,
@@ -24,9 +25,9 @@ from stratified_models.regularization_graph.networkx_graph import (
 )
 
 
-def get_data(
-    reg1: float, reg2: float, m: int, n: int
-) -> Tuple[nx.Graph, nx.Graph, dict[Tuple[int, int], NodeData],]:
+def get_problem(
+    reg1: float, reg2: float, l2_reg: float, m: int, n: int
+) -> QuadraticStratifiedLinearRegressionProblem:
     graph1 = nx.path_graph(2)
     graph2 = nx.path_graph(3)
     nx.set_edge_attributes(
@@ -51,7 +52,17 @@ def get_data(
             y=x @ np.ones(m) * -3,
         ),
     }
-    return graph1, graph2, nodes_data
+    graph: CartesianProductOfGraphs[int, int] = CartesianProductOfGraphs(
+        NetworkXRegularizationGraph(graph1, "1"),
+        NetworkXRegularizationGraph(graph2, "2"),
+    )
+    problem = QuadraticStratifiedLinearRegressionProblem(
+        nodes_data=nodes_data,
+        graph=graph,
+        l2_reg=l2_reg,
+        m=m,
+    )
+    return problem
 
 
 m_s = [
@@ -68,6 +79,7 @@ params = [
 ]
 fitters = [
     DirectFitter(),
+    ADMMFitter2(),
     CGFitter(),
     CVXPYFitter(),
     ADMMFitter(),
@@ -86,23 +98,30 @@ def test_fit(
     l2reg: float,
     theta_exp: list[float],
 ) -> None:
-    graph1, graph2, nodes_data = get_data(reg1=reg1, reg2=reg2, m=m, n=3)
-    graph: CartesianProductOfGraphs[int, int] = CartesianProductOfGraphs(
-        NetworkXRegularizationGraph(graph1, "1"),
-        NetworkXRegularizationGraph(graph2, "2"),
-    )
-    problem = StratifiedLinearRegressionProblem(
-        nodes_data=nodes_data,
-        graph=graph,
-        l2_reg=l2reg,
-        m=m,
-    )
+    problem = get_problem(reg1=reg1, reg2=reg2, m=m, n=3, l2_reg=l2reg)
     theta, cost = fitter.fit(problem)
     costs_exp = Costs.from_problem_and_theta(problem, theta)
     assert abs(cost - costs_exp.total()) < costs_exp.total() * 1e-3
     if theta_exp:
         theta_exp_df = pd.DataFrame(
             np.tile(theta_exp, (m, 1)),
-            columns=graph.nodes,
+            columns=problem.graph.nodes,
         ).T
         assert ((theta.df - theta_exp_df).abs() < 1e-3).all().all()
+
+
+@pytest.mark.parametrize(
+    ("reg1", "reg2", "l2reg"),
+    [(1, 1, 1), (1, 10, 100), (1, 100, 10)],
+)
+def test_concensus(
+    reg1: float,
+    reg2: float,
+    l2reg: float,
+) -> None:
+    problem = get_problem(reg1=reg1, reg2=reg2, m=2, n=3, l2_reg=l2reg)
+    theta, cost = fitters[0].fit(problem)
+    for fitter in fitters[1:]:
+        theta_tmp, cost_tmp = fitter.fit(problem)
+        assert (np.abs(theta.df.values - theta_tmp.df.values) < 1e-3).all()
+        assert abs(cost - cost_tmp) < 1e-3 * cost

@@ -1,14 +1,17 @@
 import pandas as pd
 import scipy
 
-from stratified_models.fitters.protocols import StratifiedLinearRegressionProblem, Theta
+from stratified_models.fitters.protocols import (
+    QuadraticStratifiedLinearRegressionProblem,
+    Theta,
+)
 from stratified_models.regularization_graph.regularization_graph import Node
 
 
 class DirectFitter:
     def fit(
         self,
-        problem: StratifiedLinearRegressionProblem[Node],
+        problem: QuadraticStratifiedLinearRegressionProblem[Node],
     ) -> tuple[Theta[Node], float]:
         a, c, d = problem.build_a_c_d()
         a = a.as_matrix()

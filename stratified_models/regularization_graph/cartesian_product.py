@@ -18,6 +18,12 @@ Node2 = TypeVar("Node2")
 NestedNode = Union[Node, Tuple["NestedNode", Node]]
 
 
+def kron_sum(
+    a: npt.NDArray[np.float64], b: npt.NDArray[np.float64]
+) -> npt.NDArray[np.float64]:
+    return np.kron(np.eye(b.shape[0]), a) + np.kron(b, np.eye(a.shape[0]))
+
+
 class CartesianProductOfGraphs(RegularizationGraph[Tuple[Node1, Node2]]):
     def __init__(
         self,
@@ -36,12 +42,23 @@ class CartesianProductOfGraphs(RegularizationGraph[Tuple[Node1, Node2]]):
         lap2 = self.graph2.laplacian_matrix()
         return scipy.sparse.kronsum(lap2, lap1)
 
+    # def laplacian_prox_matrix(self, rho: float) -> npt.NDArray[np.float64]:
+    #     out = scipy.sparse.linalg.inv(
+    #         self.laplacian_matrix()
+    #         + (2 / rho) * scipy.sparse.eye(self.number_of_nodes())
+    #     )
+    #     p1 = self.graph1.laplacian_prox_matrix(rho * 2)
+    #     p2 = self.graph2.laplacian_prox_matrix(rho * 2)
+    #     p = scipy.sparse.kronsum(p2, p1)
+    #     # p = kron_sum(p2, p1)
+    #     return out
+
     def laplacian_mult(self, x: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
         """
         (A*B is kron(A, B))
         L x = (I * L2 + L1 * I) x
         = (I * L2) x + (L1 * I) x
-        = vec( L2 mat(x) ) + vec( mat(x) L1 )
+        = vec( mat(x) L2 ) + vec( L1 mat(x) )
         """
         m = x.shape[-1]
         k1 = self.graph1.number_of_nodes()
@@ -56,31 +73,19 @@ class CartesianProductOfGraphs(RegularizationGraph[Tuple[Node1, Node2]]):
     def laplacian_prox(
         self, v: npt.NDArray[np.float64], rho: float
     ) -> npt.NDArray[np.float64]:
-        """
-        u = u1 x u2
-        w = w1 x w2
-        theta = (tL + I)^-1 v
-        u d u' v
-        d = (tw + I)^-1 = d1 x d2
-        di = (twi + I)^-1
-        prox = (u1 x u2) (d1 x d2) (u1 x u2)' v
-        = (u1 d1 u1') x (u2 d2 u2') v
-        = (prox1 x prox2) v
-        = vec(prox2 V prox1')
-        """
         m = v.shape[-1]
         k1 = self.graph1.number_of_nodes()
         k2 = self.graph2.number_of_nodes()
-        k = self.number_of_nodes()
         v = v.reshape((k1, k2, m))
-        # v = v.reshape((k2, -1))  # k1, k2*m
+        p1x = self.graph1.laplacian_prox(v.reshape((k1, -1)), rho * 2).reshape(
+            (k1, k2, m)
+        )
         v = np.swapaxes(v, 0, 1)
-        v = v.reshape((k2, -1))
-        v = self.graph2.laplacian_prox(v, rho)  # k1, k2*m
-        # todo: can be replaced by a single eingsum, probably
-        v = np.swapaxes(v.reshape((k2, k1, -1)), 0, 1).reshape((k1, -1))
-        v = self.graph1.laplacian_prox(v, rho)
-        return v.reshape((k, m))
+        p2x = self.graph2.laplacian_prox(v.reshape((k2, -1)), rho * 2).reshape(
+            (k2, k1, m)
+        )
+        p2x = np.swapaxes(p2x, 0, 1)
+        return (p1x + p2x).reshape((-1, m))
 
     @classmethod
     def multi_product(

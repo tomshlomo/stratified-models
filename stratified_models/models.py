@@ -5,8 +5,8 @@ import pandas as pd
 
 from stratified_models.fitters.protocols import (
     NodeData,
+    QuadraticStratifiedLinearRegressionProblem,
     StratifiedLinearRegressionFitter,
-    StratifiedLinearRegressionProblem,
     Theta,
 )
 from stratified_models.regularization_graph.cartesian_product import (
@@ -36,7 +36,7 @@ class StratifiedLinearRegression:
 
     def get_problem(
         self, x: pd.DataFrame, y: pd.Series
-    ) -> StratifiedLinearRegressionProblem:
+    ) -> QuadraticStratifiedLinearRegressionProblem:
         data = {}
         for flat_node, df_slice in x.groupby(self.stratification_features())[
             self.regression_columns
@@ -47,7 +47,7 @@ class StratifiedLinearRegression:
                 y=y[df_slice.index],
             )
         graph = self.get_graph()
-        return StratifiedLinearRegressionProblem(
+        return QuadraticStratifiedLinearRegressionProblem(
             nodes_data=data,
             graph=graph,
             l2_reg=self.l2_reg,

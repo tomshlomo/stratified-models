@@ -4,14 +4,17 @@ from cvxpy.atoms.sum_squares import sum_squares
 from cvxpy.expressions.variable import Variable
 from cvxpy.problems.problem import Minimize, Problem  # type: ignore
 
-from stratified_models.fitters.protocols import StratifiedLinearRegressionProblem, Theta
+from stratified_models.fitters.protocols import (
+    QuadraticStratifiedLinearRegressionProblem,
+    Theta,
+)
 from stratified_models.regularization_graph.regularization_graph import Node
 
 
 class CVXPYFitter:
     def fit(
         self,
-        problem: StratifiedLinearRegressionProblem,
+        problem: QuadraticStratifiedLinearRegressionProblem,
     ) -> tuple[Theta[Node], float]:
         cvxpy_problem, theta_vars = self._build_cvxpy_problem(problem)
         # todo: verbose flag, select solver
@@ -24,7 +27,7 @@ class CVXPYFitter:
 
     def _build_cvxpy_problem(
         self,
-        problem: StratifiedLinearRegressionProblem,
+        problem: QuadraticStratifiedLinearRegressionProblem,
     ) -> tuple[Problem, Variable]:
         k = problem.graph.number_of_nodes()
         theta = Variable((k, problem.m))

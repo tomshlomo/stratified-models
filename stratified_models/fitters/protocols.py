@@ -28,7 +28,7 @@ class NodeData:
 
 
 @dataclass
-class StratifiedLinearRegressionProblem(Generic[Node]):
+class QuadraticStratifiedLinearRegressionProblem(Generic[Node]):
     """
     sum_k ||X_k theta_k - y_k||^2 + gamma ||Theta||^2 + tr(Theta' L Theta)
     =
@@ -113,6 +113,11 @@ class LinearOperator:  # type:ignore[misc]
         x = x.reshape((self.k, self.m))
         return self.matvec(x).ravel()
 
+    def q_plus_reg(self) -> BlockDiagonalLinearOperator:
+        return BlockDiagonalLinearOperator(
+            q=self.q.q + self.l2_reg * np.eye(self.m),
+        )
+
     def as_matrix(self) -> scipy.sparse.spmatrix:
         a = self.q.as_matrix()
         a += scipy.sparse.kron(self.graph.laplacian_matrix(), scipy.sparse.eye(self.m))
@@ -158,6 +163,29 @@ class BlockDiagonalLinearOperator:
             dtype=self.dtype,
         )
 
+    def quad_form_prox(self, v, rho):
+        """
+        argmin x' a x + rho/2 |x-v|^2
+        2 a x + rho (x-v) = 0
+        (2a + rho I) x = rho v
+        x = (2/rho a + I)^-1 v
+        :param v:
+        :param rho:
+        :return:
+        """
+        p = 2 / rho * self.q + np.eye(self.m)
+        x = np.zeros((self.k, self.m))
+        for i in range(self.k):
+            x[i] = np.linalg.solve(p[i], v[i])
+        return x
+
+    def traces(self):
+        # todo: rewrite using einsum
+        x = np.zeros(self.k)
+        for i in range(self.k):
+            x[i] = np.trace(self.q[i])
+        return x
+
 
 class CallbackBasedScipyLinearOperator(scipy.sparse.linalg.LinearOperator):
     def __init__(
@@ -179,7 +207,9 @@ class Costs:
 
     @classmethod
     def from_problem_and_theta(
-        cls, problem: StratifiedLinearRegressionProblem[Node], theta: Theta[Node]
+        cls,
+        problem: QuadraticStratifiedLinearRegressionProblem[Node],
+        theta: Theta[Node],
     ) -> Costs:
         loss = 0.0
         theta_df = theta.df.set_index(pd.MultiIndex.from_tuples(theta.df.index))
@@ -202,6 +232,6 @@ class Costs:
 class StratifiedLinearRegressionFitter(Protocol[Node]):  # pragma: no cover
     def fit(
         self,
-        problem: StratifiedLinearRegressionProblem,
+        problem: QuadraticStratifiedLinearRegressionProblem,
     ) -> tuple[Theta[Node], float]:
         pass

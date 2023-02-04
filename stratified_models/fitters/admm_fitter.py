@@ -10,7 +10,8 @@ import pandas as pd
 
 from stratified_models.fitters.protocols import (
     Costs,
-    StratifiedLinearRegressionProblem,
+    LinearOperator,
+    QuadraticStratifiedLinearRegressionProblem,
     Theta,
 )
 from stratified_models.regularization_graph.regularization_graph import (
@@ -67,6 +68,7 @@ prox_t f_k(v) = argmin_theta_k theta_k' q_k theta_k  - 2 c_k + d_k + rho/2 |thet
 taking the gradient=0 gives:
 2 q_k theta_k - 2 c_k + rho(theta_k - v) = 0
 (2 q_k + rho * I)theta_k = rho v + 2 c_k
+(2/ rho q_k + I) theta_k = v + 2/rho c_k
 theta_k = (q_k + rho/2 * I)^-1  (rho/2 * v + c_k)
 
 (2) can be written as:
@@ -100,28 +102,33 @@ class ADMMFitter:
 
     def fit(
         self,
-        problem: StratifiedLinearRegressionProblem[Node],
+        problem: QuadraticStratifiedLinearRegressionProblem[Node],
     ) -> tuple[Theta[Node], Costs]:
         start = time()
         k = problem.graph.number_of_nodes()
         m = problem.m
-        instance = QuadraticStratifiedProblem.from_data(problem=problem)
+        a, c, d = problem.build_a_c_d()
+        f = a.q_plus_reg()
         u = np.zeros((k, m))
+
+        def calc_cost(theta):
+            return Costs.from_problem_and_theta(
+                problem,
+                Theta(
+                    pd.DataFrame(
+                        theta,
+                        index=problem.graph.nodes,
+                    )
+                ),
+            ).total()
+
         theta = np.zeros((k, m))
         theta_tilde = np.zeros((k, m))
-        delta = np.sum(instance.laplacian.diagonal()) / (k * m)
-        lambda_min = np.min(instance._q_eig_cache[0])
-        lambda_max = np.max(instance._q_eig_cache[0])
-        if delta < lambda_min:
-            rho = np.sqrt(lambda_min * delta)
-        elif delta > lambda_max:
-            rho = np.sqrt(lambda_max * delta)
-        else:
-            rho = delta
+
+        rho = self.suggest_rho(a)
         cost = np.zeros((self.max_iter + 1, 2))
-        cost[0, 0] = instance.eval(theta)
-        cost[0, 1] = instance.eval(theta_tilde)
-        best_cost = np.min(cost[0])
+        cost[0, :] = calc_cost(theta)
+        best_cost = np.min(cost[0, 0])
         best_theta = theta
         print(
             f"{'i':<3} | {'is_new_best':<15} {'best_cost':<15} {'d_cost0':<15} "
@@ -129,14 +136,14 @@ class ADMMFitter:
             f"time"
         )
         for i in range(1, self.max_iter + 1):
-            theta = instance.prox_f(theta_tilde - u, rho)
+            theta = f.quad_form_prox(theta_tilde - u + (2 / rho) * c, rho)
             dual_residual = theta - theta_tilde
-            theta_tilde = instance.prox_l(theta + u, rho)
+            theta_tilde = problem.graph.laplacian_prox(theta + u, rho)
             primal_residual = theta - theta_tilde
             u += primal_residual
 
-            cost[i, 0] = instance.eval(theta)
-            cost[i, 1] = instance.eval(theta_tilde)
+            cost[i, 0] = calc_cost(theta)
+            cost[i, 1] = calc_cost(theta_tilde)
             is_new_best = False
             if cost[i, 0] < best_cost and cost[i, 0] < cost[i, 1]:
                 best_cost = cost[i, 0]
@@ -158,12 +165,12 @@ class ADMMFitter:
                 f"{primal_residual_norm:<15.3e} {time() - start:4.3f}"
             )
 
-            if primal_residual_norm > 5 * dual_residual_norm:
-                rho *= 2
-                u /= 2
-            elif dual_residual_norm > 5 * primal_residual_norm:
-                rho /= 2
-                u *= 2
+            # if primal_residual_norm > 5 * dual_residual_norm:
+            #     rho *= 2
+            #     u /= 2
+            # elif dual_residual_norm > 5 * primal_residual_norm:
+            #     rho /= 2
+            #     u *= 2
 
         theta_df = pd.DataFrame(  # todo: should be a common function
             best_theta,
@@ -171,8 +178,20 @@ class ADMMFitter:
         )
         return Theta(df=theta_df), best_cost
 
+    def suggest_rho(self, a: LinearOperator) -> float:
+        delta = np.sum(a.graph.laplacian_matrix().diagonal()) / (a.k * a.m)
+        lambda_min = a.l2_reg
+        lambda_max = np.max(a.q.traces()) + a.l2_reg
+        if delta < lambda_min:
+            rho = np.sqrt(lambda_min * delta)
+        elif delta > lambda_max:
+            rho = np.sqrt(lambda_max * delta)
+        else:
+            rho = delta
+        return rho
 
-class QuadraticStratifiedProblem:  # todo:rename.
+
+class QuadraticStratifiedProblem:  # todo:delete.
     def __init__(
         self,
         q: npt.NDArray[np.float64],  # k, m, m
@@ -212,7 +231,7 @@ class QuadraticStratifiedProblem:  # todo:rename.
     @classmethod
     def from_data(
         cls,
-        problem: StratifiedLinearRegressionProblem[Node],
+        problem: QuadraticStratifiedLinearRegressionProblem[Node],
     ) -> QuadraticStratifiedProblem:
         k = problem.graph.number_of_nodes()
         m = problem.m

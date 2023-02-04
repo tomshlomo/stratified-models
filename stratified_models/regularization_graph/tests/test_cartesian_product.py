@@ -18,6 +18,70 @@ from stratified_models.regularization_graph.regularization_graph import (
 from stratified_models.utils.networkx_utils import cartesian_product
 
 
+def test_all():
+    graph1 = nx.path_graph(2)
+    graph2 = nx.path_graph(3)
+    nx.set_edge_attributes(graph1, 1, NetworkXRegularizationGraph.LAPLACE_REG_PARAM_KEY)
+    nx.set_edge_attributes(
+        graph2, 100, NetworkXRegularizationGraph.LAPLACE_REG_PARAM_KEY
+    )
+    graph: CartesianProductOfGraphs[int, int] = CartesianProductOfGraphs(
+        NetworkXRegularizationGraph(graph1, "1"),
+        NetworkXRegularizationGraph(graph2, "2"),
+    )
+    nx_graph = cartesian_product([graph1, graph2])
+    lap = graph.laplacian_matrix()
+    lap_exp = nx.laplacian_matrix(
+        nx_graph, weight=NetworkXRegularizationGraph.LAPLACE_REG_PARAM_KEY
+    )
+    diff = (lap - lap_exp).toarray()
+    assert np.all(diff == 0)
+
+    rng = np.random.RandomState(42)
+    x = rng.standard_normal((6, 2))
+    y = graph.laplacian_mult(x)
+    y_exp = lap_exp @ x
+    diff = y - y_exp
+    assert np.all(np.abs(diff) < 1e-9)
+
+    y = graph.laplacian_quad_form(x)
+    y_exp = np.trace(x.T @ lap_exp @ x)
+    assert y == y_exp
+
+    rho = 1.23
+    graph.laplacian_prox_matrix(rho)
+    y = graph.laplacian_prox(x, rho)
+    y_exp = scipy.sparse.linalg.spsolve(lap_exp * (2 / rho) + scipy.sparse.eye(6), x)
+    diff = y - y_exp
+    assert np.all(np.abs(diff) < 1e-9)
+
+    w1, u1 = np.linalg.eigh(
+        nx.laplacian_matrix(
+            graph1, weight=NetworkXRegularizationGraph.LAPLACE_REG_PARAM_KEY
+        ).toarray()
+    )
+    w2, u2 = np.linalg.eigh(
+        nx.laplacian_matrix(
+            graph2, weight=NetworkXRegularizationGraph.LAPLACE_REG_PARAM_KEY
+        ).toarray()
+    )
+
+    u_exp = np.kron(u1, u2)
+    a = u_exp.T @ lap @ u_exp
+    w = np.diag(a)
+    d = np.diag(w)
+    assert np.abs(d - a).max() < 1e-9
+
+    w_exp = np.add.outer(w1, w2).ravel()
+    assert np.abs(w - w_exp).max() < 1e-9
+
+    d1 = scipy.sparse.diags(w1)
+    d2 = scipy.sparse.diags(w2)
+    d_exp = scipy.sparse.kronsum(d2, d1)
+    assert np.abs(d_exp.toarray() - d).max() < 1e-9
+    pass
+
+
 def get_graphs(
     reg: Tuple[float, float, float]
 ) -> Iterable[tuple[RegularizationGraph[int | tuple[int, ...]], list[nx.Graph]],]:
@@ -58,6 +122,7 @@ def test_get_laplacian() -> None:
     ("reg1", "reg2", "reg3"),
     [
         (1.0, 0.0, 0.0),
+        (1.0, 0.0, 0.0),
         (0.0, 1.0, 0.0),
         (0.0, 0.0, 1.0),
         (0.0, 0.0, 0.0),
@@ -73,7 +138,7 @@ def test_laplacian_prox(reg1: float, reg2: float, reg3: float) -> None:
         )
         k = lap.shape[0]
         v = np.arange(k * 4, dtype=np.float64).reshape(k, 4)
-        expected = scipy.sparse.linalg.spsolve(lap / rho + scipy.sparse.eye(k), v)
+        expected = scipy.sparse.linalg.spsolve(lap * (2 / rho) + scipy.sparse.eye(k), v)
         theta = graph.laplacian_prox(v, rho)
         assert np.abs(theta - expected).max() <= 1e-9
 

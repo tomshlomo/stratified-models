@@ -14,6 +14,7 @@ from stratified_models.regularization_graph.regularization_graph import (
 
 class NetworkXRegularizationGraph(RegularizationGraph[Node]):
     # todo:rename to simply "WEIGHT_KEY", and change value to simply "weight"
+    # todo: should be a parameter to constructor
     LAPLACE_REG_PARAM_KEY = "laplace_reg_param"
 
     def __init__(self, graph: nx.Graph, name: str):
@@ -36,6 +37,12 @@ class NetworkXRegularizationGraph(RegularizationGraph[Node]):
 
     def laplacian_matrix(self) -> scipy.sparse.spmatrix:
         return self._laplacian_matrix
+
+    # def laplacian_prox_matrix(self, rho: float) -> npt.NDArray[np.float64]:
+    #     return scipy.sparse.linalg.inv(
+    #         self._laplacian_matrix
+    #         + (2 / rho) * scipy.sparse.eye(self.number_of_nodes())
+    #     )
 
     def laplacian_mult(self, x: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
         return self._laplacian_matrix @ x

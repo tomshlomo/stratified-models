@@ -28,6 +28,10 @@ class RegularizationGraph(Generic[Node]):
         pass
 
     @abstractmethod
+    def laplacian_prox_matrix(self, rho: float) -> npt.NDArray[np.float64]:
+        pass
+
+    @abstractmethod
     def laplacian_mult(self, x: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
         pass
 
