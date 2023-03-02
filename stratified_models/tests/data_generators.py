@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import scipy
 
-from stratified_models.fitters.admm_fitter import ADMMFitter
+from stratified_models.fitters.admm_fitter2 import ADMMFitter2
 from stratified_models.fitters.direct_fitter import DirectFitter
 from stratified_models.fitters.protocols import Costs
 from stratified_models.models import StratifiedLinearRegression
@@ -97,7 +97,7 @@ if __name__ == "__main__":
             graph, reg, NetworkXRegularizationGraph.LAPLACE_REG_PARAM_KEY
         )
         graphs.append(NetworkXRegularizationGraph(graph, name))
-    fitter = ADMMFitter()
+    fitter = ADMMFitter2()
     model = StratifiedLinearRegression(
         fitter=fitter,
         graphs=graphs,

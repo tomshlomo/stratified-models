@@ -70,23 +70,6 @@ class CartesianProductOfGraphs(RegularizationGraph[Tuple[Node1, Node2]]):
         l2x = np.swapaxes(l2x, 0, 1)
         return (l1x + l2x).reshape((-1, m))
 
-    def laplacian_prox(
-        self, v: npt.NDArray[np.float64], rho: float
-    ) -> npt.NDArray[np.float64]:
-        m = v.shape[-1]
-        k1 = self.graph1.number_of_nodes()
-        k2 = self.graph2.number_of_nodes()
-        v = v.reshape((k1, k2, m))
-        p1x = self.graph1.laplacian_prox(v.reshape((k1, -1)), rho * 2).reshape(
-            (k1, k2, m)
-        )
-        v = np.swapaxes(v, 0, 1)
-        p2x = self.graph2.laplacian_prox(v.reshape((k2, -1)), rho * 2).reshape(
-            (k2, k1, m)
-        )
-        p2x = np.swapaxes(p2x, 0, 1)
-        return (p1x + p2x).reshape((-1, m))
-
     @classmethod
     def multi_product(
         cls,
@@ -96,3 +79,28 @@ class CartesianProductOfGraphs(RegularizationGraph[Tuple[Node1, Node2]]):
         for next_graph in graphs[1:]:
             graph = CartesianProductOfGraphs(graph, next_graph)
         return graph
+
+    def gft(self, x: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
+        m = x.shape[-1]
+        k1 = self.graph1.number_of_nodes()
+        k2 = self.graph2.number_of_nodes()
+        x = x.reshape((k1, k2, m))
+        x = self.graph1.gft(x.reshape((k1, -1))).reshape((k1, k2, m))
+        x = np.swapaxes(x, 0, 1)
+        x = self.graph2.gft(x.reshape((k2, -1))).reshape((k2, k1, m))
+        x = np.swapaxes(x, 0, 1)
+        return x.reshape((-1, m))
+
+    def igft(self, x: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
+        m = x.shape[-1]
+        k1 = self.graph1.number_of_nodes()
+        k2 = self.graph2.number_of_nodes()
+        x = x.reshape((k1, k2, m))
+        x = self.graph1.igft(x.reshape((k1, -1))).reshape((k1, k2, m))
+        x = np.swapaxes(x, 0, 1)
+        x = self.graph2.igft(x.reshape((k2, -1))).reshape((k2, k1, m))
+        x = np.swapaxes(x, 0, 1)
+        return x.reshape((-1, m))
+
+    def spectrum(self) -> npt.NDArray[np.float64]:
+        return np.add.outer(self.graph1.spectrum(), self.graph2.spectrum()).ravel()

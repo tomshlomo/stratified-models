@@ -49,37 +49,10 @@ def test_all():
     assert y == y_exp
 
     rho = 1.23
-    graph.laplacian_prox_matrix(rho)
     y = graph.laplacian_prox(x, rho)
     y_exp = scipy.sparse.linalg.spsolve(lap_exp * (2 / rho) + scipy.sparse.eye(6), x)
     diff = y - y_exp
     assert np.all(np.abs(diff) < 1e-9)
-
-    w1, u1 = np.linalg.eigh(
-        nx.laplacian_matrix(
-            graph1, weight=NetworkXRegularizationGraph.LAPLACE_REG_PARAM_KEY
-        ).toarray()
-    )
-    w2, u2 = np.linalg.eigh(
-        nx.laplacian_matrix(
-            graph2, weight=NetworkXRegularizationGraph.LAPLACE_REG_PARAM_KEY
-        ).toarray()
-    )
-
-    u_exp = np.kron(u1, u2)
-    a = u_exp.T @ lap @ u_exp
-    w = np.diag(a)
-    d = np.diag(w)
-    assert np.abs(d - a).max() < 1e-9
-
-    w_exp = np.add.outer(w1, w2).ravel()
-    assert np.abs(w - w_exp).max() < 1e-9
-
-    d1 = scipy.sparse.diags(w1)
-    d2 = scipy.sparse.diags(w2)
-    d_exp = scipy.sparse.kronsum(d2, d1)
-    assert np.abs(d_exp.toarray() - d).max() < 1e-9
-    pass
 
 
 def get_graphs(

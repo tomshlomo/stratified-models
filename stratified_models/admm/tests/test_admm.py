@@ -2,12 +2,7 @@ import numpy as np
 
 from stratified_models.admm.admm import ConsensusADMMSolver, ConsensusProblem
 from stratified_models.admm.losses import SumOfSquaresLoss
-from stratified_models.admm.regularizers import (
-    MatrixQuadForm,
-    NonNegativeIndicator,
-    QuadForm,
-    SumOfSquares,
-)
+from stratified_models.admm.regularizers import MatrixQuadForm, QuadForm, SumOfSquares
 
 RNG = np.random.RandomState(42)
 
@@ -101,35 +96,6 @@ def test_matrix_tykhonov_regularization():
         problem=problem,
         x0=np.zeros(m),
         y0=np.zeros((2, m)),
-    )
-    assert np.linalg.norm(x - x_exp) <= 1e-6
-    assert abs(cost - cost_exp) <= 1e-6
-
-
-def test_non_negative_ridge_regression():
-    """
-    argmin 1/2 |ax - b|^2 + gamma/2 |x|^2
-    a'(ax-b) + gamma x = 0
-    (a'a + gamma I) x = a'b
-    """
-    n = 10
-    m = 3
-    a = RNG.standard_normal((n, m))
-    b = RNG.standard_normal((n,))
-    gamma = 10.0
-    x_exp = np.linalg.solve(a.T @ a + gamma * np.eye(m), a.T @ b)
-    r = a @ x_exp - b
-    cost_exp = (r @ r + gamma * (x_exp @ x_exp)) / 2
-
-    problem = ConsensusProblem(
-        f=[SumOfSquaresLoss(a=a, b=b), SumOfSquares(gamma=gamma)],
-        g=NonNegativeIndicator(),
-        m=m,
-    )
-    x, cost = ConsensusADMMSolver().solve(
-        problem=problem,
-        x0=np.zeros(m),
-        y0=np.zeros((1, m)),
     )
     assert np.linalg.norm(x - x_exp) <= 1e-6
     assert abs(cost - cost_exp) <= 1e-6

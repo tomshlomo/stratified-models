@@ -1,16 +1,15 @@
 from abc import abstractmethod
-from typing import Generic, Tuple, TypeVar, Union
+from typing import Generic, Hashable, TypeVar
 
-import numpy as np
-import numpy.typing as npt
 import pandas as pd
-import scipy
+
+from stratified_models.scalar_function import ScalarFunction
 
 Node = TypeVar("Node")
-Name = Union[str, Tuple["Name", "Name"]]
+F = TypeVar("F", bound=ScalarFunction)
 
 
-class RegularizationGraph(Generic[Node]):
+class RegularizationGraph(Generic[Node, F]):
     def __init__(self, nodes: pd.Index):
         self.nodes = nodes
 
@@ -20,26 +19,46 @@ class RegularizationGraph(Generic[Node]):
     def number_of_nodes(self) -> int:
         return self.nodes.shape[0]  # type:ignore[no-any-return]
 
-    def name(self) -> Name:
+    def name(self) -> Hashable:
         return self.nodes.name  # type:ignore[no-any-return]
 
     @abstractmethod
-    def laplacian_matrix(self) -> scipy.sparse.spmatrix:
+    def laplacian(self, axis: int, dims: tuple[int, ...]) -> F:
         pass
 
-    @abstractmethod
-    def laplacian_prox_matrix(self, rho: float) -> npt.NDArray[np.float64]:
-        pass
+    # @abstractmethod
+    # def laplacian_operator(self, axis: int, dims: tuple[int, ...]) -> LinearOperator:
+    #     pass
+    #
+    # @abstractmethod
+    # def laplacian_matrix(self) -> scipy.sparse.spmatrix:
+    #     pass
 
-    @abstractmethod
-    def laplacian_mult(self, x: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
-        pass
+    # def laplacian_prox_matrix(self, rho: float) -> npt.NDArray[np.float64]:
+    #     return self.laplacian_prox(np.eye(self.number_of_nodes()), rho)
 
-    def laplacian_quad_form(self, x: npt.NDArray[np.float64]) -> float:
-        return x.ravel() @ self.laplacian_mult(x).ravel()
-
-    @abstractmethod
-    def laplacian_prox(
-        self, v: npt.NDArray[np.float64], rho: float
-    ) -> npt.NDArray[np.float64]:
-        pass
+    # @abstractmethod
+    # def laplacian_mult(self, x: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
+    #     pass
+    #
+    # def laplacian_quad_form(self, x: npt.NDArray[np.float64]) -> float:
+    #     return x.ravel() @ self.laplacian_mult(x).ravel()
+    #
+    # def laplacian_prox(
+    #     self, v: npt.NDArray[np.float64], rho: float
+    # ) -> npt.NDArray[np.float64]:
+    #     v = self.gft(v)
+    #     v /= self.spectrum()[:, np.newaxis] * (2 / rho) + 1.0
+    #     return self.igft(v)
+    #
+    # @abstractmethod
+    # def gft(self, x: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
+    #     pass
+    #
+    # @abstractmethod
+    # def igft(self, x: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
+    #     pass
+    #
+    # @abstractmethod
+    # def spectrum(self) -> npt.NDArray[np.float64]:
+    #     pass

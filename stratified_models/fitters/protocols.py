@@ -10,6 +10,7 @@ import numpy.typing as npt
 import pandas as pd
 import scipy
 
+import stratified_models.linear_operator
 from stratified_models.regularization_graph.regularization_graph import (
     Node,
     RegularizationGraph,
@@ -187,7 +188,9 @@ class BlockDiagonalLinearOperator:
         return x
 
 
-class CallbackBasedScipyLinearOperator(scipy.sparse.linalg.LinearOperator):
+class CallbackBasedScipyLinearOperator(
+    stratified_models.linear_operator.LinearOperator
+):
     def __init__(
         self,
         matvec: Callable[[npt.NDArray[np.float64]], npt.NDArray[np.float64]],

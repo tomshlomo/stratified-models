@@ -1,47 +1,77 @@
+import cvxpy as cp
 import pandas as pd
-from cvxpy import quad_form
-from cvxpy.atoms.sum_squares import sum_squares
 from cvxpy.expressions.variable import Variable
 from cvxpy.problems.problem import Minimize, Problem  # type: ignore
 
-from stratified_models.fitters.protocols import (
-    QuadraticStratifiedLinearRegressionProblem,
-    Theta,
-)
-from stratified_models.regularization_graph.regularization_graph import Node
+from stratified_models.fitters.fitter import Fitter
+from stratified_models.fitters.protocols import Theta
+from stratified_models.problem import StratifiedLinearRegressionProblem
+from stratified_models.scalar_function import ScalarFunction
 
 
-class CVXPYFitter:
+class CVXPYScalarFunction(ScalarFunction):
+    def cvxpy_expression(self, x: cp.Expression) -> cp.Expression:
+        pass
+
+
+class CVXPYFitter(Fitter[CVXPYScalarFunction]):
     def fit(
-        self,
-        problem: QuadraticStratifiedLinearRegressionProblem,
-    ) -> tuple[Theta[Node], float]:
+        self, problem: StratifiedLinearRegressionProblem[CVXPYScalarFunction]
+    ) -> Theta:
         cvxpy_problem, theta_vars = self._build_cvxpy_problem(problem)
         # todo: verbose flag, select solver
         cvxpy_problem.solve(verbose=True)  # type: ignore
         theta_df = pd.DataFrame(  # todo: should be a common function
-            theta_vars.value.reshape((-1, problem.m)),
-            index=problem.graph.nodes,
+            theta_vars.value,
+            index=pd.MultiIndex.from_product(
+                graph.nodes for graph, _ in problem.graphs
+            ),
+            columns=problem.regression_features,
         )
-        return Theta(df=theta_df), cvxpy_problem.objective.value
+        return Theta(df=theta_df)
 
     def _build_cvxpy_problem(
         self,
-        problem: QuadraticStratifiedLinearRegressionProblem,
+        problem: StratifiedLinearRegressionProblem[CVXPYScalarFunction],
     ) -> tuple[Problem, Variable]:
-        k = problem.graph.number_of_nodes()
-        theta = Variable((k, problem.m))
-        local_regularization = sum_squares(theta) * problem.l2_reg
-        loss = 0.0
-        for node, node_data in problem.nodes_data.items():
-            i = problem.graph.get_node_index(node)
-            y_pred = node_data.x @ theta[i]
-            loss += sum_squares(y_pred - node_data.y)  # type: ignore[no-untyped-call]
-        laplacian = problem.graph.laplacian_matrix()
-        laplacian_regularization = 0.0
-        for i in range(problem.m):
-            laplacian_regularization += quad_form(
-                theta[:, i], laplacian, assume_PSD=True
-            )
-        cost = loss + local_regularization + laplacian_regularization
+        theta = Variable(problem.theta_flat_shape())
+        loss = self._get_loss(theta, problem)
+        local_reg = self._get_local_reg(theta, problem)
+        laplace_reg = self._get_laplace_reg(theta, problem)
+        cost = loss + local_reg + laplace_reg
         return Problem(Minimize(cost)), theta
+
+    def _get_local_reg(
+        self,
+        theta: Variable,
+        problem: StratifiedLinearRegressionProblem[CVXPYScalarFunction],
+    ) -> cp.Expression:
+        return sum(
+            (
+                func.cvxpy_expression(theta) * gamma
+                for func, gamma in problem.regularizers
+                if gamma
+            )
+        )
+
+    def _get_loss(
+        self,
+        theta: Variable,
+        problem: StratifiedLinearRegressionProblem[CVXPYScalarFunction],
+    ) -> cp.Expression:
+        loss_expr = 0.0
+        for loss, node in problem.loss_iter():
+            node_index = problem.get_node_flat_index(node)
+            loss_expr += loss.cvxpy_expression(theta[node_index])
+        return loss_expr
+
+    def _get_laplace_reg(
+        self,
+        theta: Variable,
+        problem: StratifiedLinearRegressionProblem[CVXPYScalarFunction],
+    ) -> cp.Expression:
+        theta_flat = theta.flatten(order="C")
+        return sum(
+            gamma * laplacian.cvxpy_expression(theta_flat)
+            for laplacian, gamma in problem.laplacians()
+        )
