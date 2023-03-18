@@ -4,15 +4,17 @@ from abc import abstractmethod
 from dataclasses import dataclass
 from typing import Generic, Optional, TypeVar
 
-import numpy as np
-import numpy.typing as npt
 import pandas as pd
 import scipy
 
-from stratified_models.fitters.protocols import Theta
 from stratified_models.problem import F, StratifiedLinearRegressionProblem
 from stratified_models.quadratic import ExplicitQuadraticFunction
-from stratified_models.scalar_function import QuadraticScalarFunction
+from stratified_models.scalar_function import Array, QuadraticScalarFunction
+
+
+@dataclass
+class Theta:
+    df: pd.DataFrame
 
 
 class Fitter(Generic[F]):
@@ -21,15 +23,15 @@ class Fitter(Generic[F]):
         pass
 
 
-Q = TypeVar("Q", bound=QuadraticScalarFunction)
+Q = TypeVar("Q", bound=QuadraticScalarFunction[Array])
 
 
 # todo: wrong location
 @dataclass
-class QuadraticProblemFitter:
+class QuadraticProblemFitter(Fitter[Q]):
     solver: PSDSystemSolver
 
-    def fit(self, problem: StratifiedLinearRegressionProblem[Q]):
+    def fit(self, problem: StratifiedLinearRegressionProblem[Q]) -> Theta:
         f = self._build_quadratic(problem)
         theta = self.solver.solve(f, problem)
         theta = theta.reshape((-1, problem.m))
@@ -88,7 +90,7 @@ class PSDSystemSolver:
         self,
         f: ExplicitQuadraticFunction,
         problem: StratifiedLinearRegressionProblem[Q],
-    ) -> npt.NDArray[np.float64]:
+    ) -> Array:
         pass
 
 
@@ -98,9 +100,9 @@ class DirectSolver(PSDSystemSolver):
         self,
         f: ExplicitQuadraticFunction,
         problem: StratifiedLinearRegressionProblem[Q],
-    ) -> npt.NDArray[np.float64]:
+    ) -> Array:
         a = f.q.as_sparse_matrix()
-        return scipy.sparse.linalg.spsolve(a, -f.c)
+        return scipy.sparse.linalg.spsolve(a, -f.c)  # type: ignore[no-any-return]
 
 
 @dataclass
@@ -112,7 +114,7 @@ class CGSolver(PSDSystemSolver):
         self,
         f: ExplicitQuadraticFunction,
         problem: StratifiedLinearRegressionProblem[Q],
-    ) -> npt.NDArray[np.float64]:
+    ) -> Array:
         theta, info = scipy.sparse.linalg.cg(
             f.q.to_scipy_linear_operator(),
             -f.c,
@@ -120,7 +122,7 @@ class CGSolver(PSDSystemSolver):
             maxiter=self.max_iter,
         )
         # todo: raise error if info indicates a problem
-        return theta
+        return theta  # type: ignore[no-any-return]
 
 
 # @dataclass

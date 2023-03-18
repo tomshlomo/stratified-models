@@ -1,43 +1,31 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Generic, TypeVar
 
 import numpy as np
-import numpy.typing as npt
 
-from stratified_models.scalar_function import ScalarFunction
-
-# Var = npt.NDArray[np.float64]
-# Vars = npt.NDArray[np.float64]
-# DualVars = npt.NDArray[np.float64]
-T = TypeVar("T")
-
-
-class Proxable(ScalarFunction[T]):
-    def prox(self, v: T, t: float) -> T:
-        pass
+from stratified_models.scalar_function import Array, ProxableScalarFunction
 
 
 @dataclass
-class ConsensusProblem(Generic[T]):
-    f: list[tuple[Proxable[T], float]]
-    g: Proxable[T]
+class ConsensusProblem:
+    f: list[tuple[ProxableScalarFunction[Array], float]]
+    g: ProxableScalarFunction[Array]
     # m: int
 
     @property
-    def n(self):
+    def n(self) -> int:
         return len(self.f)
 
-    def cost(self, x: T) -> float:
+    def cost(self, x: Array) -> float:
         return sum(ff(x) * gamma for ff, gamma in self.f) + self.g(x)
 
 
 @dataclass
-class ADMMState(Generic[T]):
-    x: npt.NDArray[T]
-    u: npt.NDArray[T]
-    z: T
+class ADMMState:
+    x: Array
+    u: Array
+    z: Array
     t: float
 
     @property
@@ -45,14 +33,14 @@ class ADMMState(Generic[T]):
         return len(self.x)
 
 
-class ConsensusADMMSolver(Generic[T]):
+class ConsensusADMMSolver:
     def solve(
         self,
         problem: ConsensusProblem,
-        x0: T,
-        y0: npt.NDArray[T],
+        x0: Array,
+        y0: Array,
         t0: float = 1.0,
-    ) -> tuple[T, float, ADMMState[T]]:
+    ) -> tuple[Array, float, ADMMState]:
         assert problem.n == y0.shape[0]
         state = self.get_init_state(x0=x0, y0=y0, t0=t0, problem=problem)
         costs = [[problem.cost(x) for x in state.x] + [problem.cost(state.z)]]
@@ -93,8 +81,8 @@ class ConsensusADMMSolver(Generic[T]):
 
     def get_init_state(
         self,
-        x0: T,
-        y0: npt.NDArray[T],
+        x0: Array,
+        y0: Array,
         t0: float,
         problem: ConsensusProblem,
     ) -> ADMMState:

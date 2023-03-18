@@ -18,12 +18,16 @@ from stratified_models.problem import StratifiedLinearRegressionProblem
 from stratified_models.regularization_graph.networkx_graph import (
     NetworkXRegularizationGraph,
 )
-from stratified_models.scalar_function import QuadraticScalarFunction, SumOfSquares
+from stratified_models.scalar_function import (
+    Array,
+    QuadraticScalarFunction,
+    SumOfSquares,
+)
 
 
 def get_problem(
     reg1: float, reg2: float, l2_reg: float, m: int, n: int
-) -> StratifiedLinearRegressionProblem[QuadraticScalarFunction]:
+) -> StratifiedLinearRegressionProblem[QuadraticScalarFunction[Array]]:
     graph1 = NetworkXRegularizationGraph(nx.path_graph(2), "strat_0")
     graph2 = NetworkXRegularizationGraph(nx.path_graph(3), "strat_1")
     # nx.set_edge_attributes(
@@ -90,7 +94,7 @@ fitters = [
 )
 def test_fit(
     m: int,
-    fitter: Fitter[QuadraticScalarFunction],
+    fitter: Fitter[QuadraticScalarFunction[Array]],
     reg1: float,
     reg2: float,
     l2reg: float,

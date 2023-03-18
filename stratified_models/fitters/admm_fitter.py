@@ -3,14 +3,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import numpy as np
-import numpy.typing as npt
 import pandas as pd
 
-from stratified_models.admm.admm import ConsensusADMMSolver, ConsensusProblem, Proxable
-from stratified_models.fitters.fitter import Fitter
-from stratified_models.fitters.protocols import Theta
+from stratified_models.admm.admm import ConsensusADMMSolver, ConsensusProblem
+from stratified_models.fitters.fitter import Fitter, Theta
 from stratified_models.problem import StratifiedLinearRegressionProblem
-from stratified_models.scalar_function import Vector, Zero
+from stratified_models.scalar_function import Array, ProxableScalarFunction, Zero
 
 """
 cost(theta) = sum_k f_k(theta_k) + laplacian(theta)
@@ -89,12 +87,12 @@ u <- u + theta - theta_tilde
 
 
 # @dataclass
-class ADMMFitter(Fitter[Proxable]):
+class ADMMFitter(Fitter[ProxableScalarFunction[Array]]):
     # solver: ConsensusADMMSolver
 
     def fit(
         self,
-        problem: StratifiedLinearRegressionProblem[Proxable],
+        problem: StratifiedLinearRegressionProblem[ProxableScalarFunction[Array]],
     ) -> Theta:
         admm_problem = self._build_admm_problem(problem)
         theta, cost, final_admm_state = ConsensusADMMSolver().solve(
@@ -113,12 +111,14 @@ class ADMMFitter(Fitter[Proxable]):
         return Theta(df=theta_df)
 
     def _build_admm_problem(
-        self, problem: StratifiedLinearRegressionProblem[Proxable]
+        self, problem: StratifiedLinearRegressionProblem[ProxableScalarFunction[Array]]
     ) -> ConsensusProblem:
         # problem.
         # k, m = problem.theta_flat_shape()
         # km = k * m
-        f = [(self._get_loss(problem), 1.0)]
+        f: list[tuple[ProxableScalarFunction[Array], float]] = [
+            (self._get_loss(problem), 1.0)
+        ]
         f.extend(problem.regularizers)
         f.extend(problem.laplacians())
         # f.extend(self._get_laplacian_regularizers(problem))
@@ -127,7 +127,9 @@ class ADMMFitter(Fitter[Proxable]):
             g=Zero(),  # enforce domain constraints?
         )
 
-    def _get_loss(self, problem: StratifiedLinearRegressionProblem[Proxable]):
+    def _get_loss(
+        self, problem: StratifiedLinearRegressionProblem[ProxableScalarFunction[Array]]
+    ) -> LossForADMM:
         losses = []
         for loss, node in problem.loss_iter():
             index = problem.get_node_index(node)
@@ -136,19 +138,19 @@ class ADMMFitter(Fitter[Proxable]):
 
     # def _get_laplacian_regularizers(
     #         self,
-    #         problem: StratifiedLinearRegressionProblem[Proxable],
-    # ) -> list[tuple[Proxable[Theta], float]]:
+    #         problem: StratifiedLinearRegressionProblem[ProxableScalarFunction[Array]],
+    # ) -> list[tuple[ProxableScalarFunction[Array][Theta], float]]:
     #     problem.laplacians()
 
 
 @dataclass
-class LossForADMM:
-    losses: list[tuple[Proxable[Vector], tuple[int, ...]]]
+class LossForADMM(ProxableScalarFunction[Array]):
+    losses: list[tuple[ProxableScalarFunction[Array], tuple[int, ...]]]
 
-    def __call__(self, x: npt.NDArray[np.float64]) -> float:
+    def __call__(self, x: Array) -> float:
         return sum(loss(x[index]) for loss, index in self.losses)
 
-    def prox(self, v: npt.NDArray[np.float64], t: float) -> npt.NDArray[np.float64]:
+    def prox(self, v: Array, t: float) -> Array:
         x = v.copy()
         for loss, index in self.losses:
             local_theta = v[index]

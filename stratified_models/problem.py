@@ -8,9 +8,9 @@ from stratified_models.losses import LossFactory
 from stratified_models.regularization_graph.regularization_graph import (
     RegularizationGraph,
 )
-from stratified_models.scalar_function import ScalarFunction
+from stratified_models.scalar_function import Array, ScalarFunction
 
-F = TypeVar("F", bound=ScalarFunction)
+F = TypeVar("F", bound=ScalarFunction[Array])
 
 
 @dataclass
@@ -19,24 +19,24 @@ class StratifiedLinearRegressionProblem(Generic[F]):
     y: pd.Series
     loss_factory: LossFactory[F]
     regularizers: list[tuple[F, float]]
-    graphs: list[tuple[RegularizationGraph[Hashable, F], float]]
-    regression_features: list[Hashable]
+    graphs: list[tuple[RegularizationGraph[F], float]]
+    regression_features: list[str]
 
     @property
-    def m(self):
+    def m(self) -> int:
         return len(self.regression_features)
 
     @property
     def stratification_features(self) -> list[Hashable]:
         return [graph.name() for graph, _ in self.graphs]
 
-    def loss_iter(self) -> Iterable[tuple[F, Hashable]]:
+    def loss_iter(self) -> Iterable[tuple[F, tuple[Hashable, ...]]]:
         for node, x, y in self.node_data_iter():
             yield self.loss_factory.build_loss_function(x, y), node
 
     def node_data_iter(
         self,
-    ) -> Iterable[tuple[Hashable | tuple[Hashable], pd.DataFrame, pd.Series]]:
+    ) -> Iterable[tuple[tuple[Hashable, ...], pd.DataFrame, pd.Series,]]:
         for node, x_slice in self.x.groupby(self.stratification_features)[
             self.regression_features
         ]:
@@ -50,7 +50,7 @@ class StratifiedLinearRegressionProblem(Generic[F]):
     def theta_shape(self) -> tuple[int, ...]:  # todo: remove?
         return *self.graph_sizes(), self.m
 
-    def graph_sizes(self) -> tuple[int]:
+    def graph_sizes(self) -> tuple[int, ...]:
         return tuple(graph.number_of_nodes() for graph, _ in self.graphs)
 
     def theta_flat_shape(self) -> tuple[int, int]:  # todo: remove?

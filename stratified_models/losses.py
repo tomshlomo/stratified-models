@@ -10,9 +10,14 @@ import pandas as pd
 
 from stratified_models.linear_operator import MatrixBasedLinearOperator
 from stratified_models.quadratic import ExplicitQuadraticFunction
-from stratified_models.scalar_function import DenseMatrix, ScalarFunction, Vector
+from stratified_models.scalar_function import (
+    Array,
+    ProxableScalarFunction,
+    QuadraticScalarFunction,
+    ScalarFunction,
+)
 
-L = TypeVar("L", bound=ScalarFunction)
+L = TypeVar("L", bound=ScalarFunction[Array], covariant=True)
 
 
 class LossFactory(Generic[L]):
@@ -21,23 +26,17 @@ class LossFactory(Generic[L]):
         pass
 
 
-class SumOfSquaresLossFactory(LossFactory):
-    @abstractmethod
-    def build_loss_function(self, x: pd.DataFrame, y: pd.Series) -> SumOfSquaresLoss:
-        return SumOfSquaresLoss(x.values, y.values)
-
-
 @dataclass
-class SumOfSquaresLoss:
-    a: DenseMatrix
-    b: Vector
+class SumOfSquaresLoss(QuadraticScalarFunction[Array], ProxableScalarFunction[Array]):
+    a: Array
+    b: Array
 
-    def __call__(self, x: Vector) -> float:
+    def __call__(self, x: Array) -> float:
         y = self.a @ x
         r = y - self.b
-        return (r @ r) / 2
+        return float((r @ r) / 2)
 
-    def prox(self, v: Vector, t: float) -> Vector:
+    def prox(self, v: Array, t: float) -> Array:
         """
         argmin 1/2 |ax-b|^2 + 1/2t |x - v|^2
         a'(ax-b) + 1/t (x -v) = 0
@@ -51,8 +50,11 @@ class SumOfSquaresLoss:
         # todo: invert aa' instead if a'a it is faster
         return np.linalg.solve(q, rhs)
 
-    def cvxpy_expression(self, x: cp.Expression) -> cp.Expression:
-        return cp.sum_squares(self.a @ x - self.b)
+    def cvxpy_expression(
+        self,
+        x: cp.Expression,  # type: ignore[name-defined]
+    ) -> cp.Expression:  # type: ignore[name-defined]
+        return cp.sum_squares(self.a @ x - self.b)  # type: ignore[attr-defined]
 
     def to_explicit_quadratic(self) -> ExplicitQuadraticFunction:
         """
@@ -64,5 +66,10 @@ class SumOfSquaresLoss:
                 self.a.T @ self.a
             ),  # todo: low rank linear operator
             c=-self.a.T @ self.b,
-            d=(self.b @ self.b) / 2,
+            d=float((self.b @ self.b) / 2),
         )
+
+
+class SumOfSquaresLossFactory(LossFactory[SumOfSquaresLoss]):
+    def build_loss_function(self, x: pd.DataFrame, y: pd.Series) -> SumOfSquaresLoss:
+        return SumOfSquaresLoss(x.values, y.values)

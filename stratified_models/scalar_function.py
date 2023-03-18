@@ -12,9 +12,8 @@ from numpy import typing as npt
 from stratified_models.linear_operator import FlattenedTensorDot, Identity
 from stratified_models.quadratic import ExplicitQuadraticFunction
 
-T = TypeVar("T")
-Vector = npt.NDArray[np.float64]
-DenseMatrix = npt.NDArray[np.float64]
+T = TypeVar("T", contravariant=True)
+Array = npt.NDArray[np.float64]
 
 
 class ScalarFunction(Protocol[T]):
@@ -41,16 +40,7 @@ class ScalarFunction(Protocol[T]):
 #             x[k] = f.prox(v[k], t)
 
 
-@dataclass
-class Zero(Generic[T]):
-    def __call__(self, x: T) -> float:
-        return 0.0
-
-    def prox(self, v: T, t: float) -> T:
-        return v
-
-
-class QuadraticScalarFunction(ScalarFunction[T]):
+class QuadraticScalarFunction(ScalarFunction[T], Protocol):
     """
     f(x) = x' q x / 2 - c'x + d/2 for some psd matrix q, vector c, and scalar d
     """
@@ -62,13 +52,25 @@ class QuadraticScalarFunction(ScalarFunction[T]):
     #     pass
 
 
-class ProxableScalarFunction(ScalarFunction[T]):
-    def prox(self, v: T, t: float) -> T:
+X = TypeVar("X")
+
+
+class ProxableScalarFunction(ScalarFunction[X], Protocol):
+    def prox(self, v: X, t: float) -> X:
         pass
 
 
 @dataclass
-class SumOfSquares:
+class Zero(Generic[X], ProxableScalarFunction[X]):
+    def __call__(self, x: X) -> float:
+        return 0.0
+
+    def prox(self, v: X, t: float) -> X:
+        return v
+
+
+@dataclass
+class SumOfSquares(ProxableScalarFunction[Array], QuadraticScalarFunction[Array]):
     """
     x |-> x'x/2
     x in R^m
@@ -76,10 +78,10 @@ class SumOfSquares:
 
     shape: int | tuple[int, ...]
 
-    def __call__(self, x: Vector) -> float:
-        return (x.ravel() @ x.ravel()) / 2
+    def __call__(self, x: Array) -> float:
+        return float((x.ravel() @ x.ravel()) / 2)
 
-    def prox(self, v: Vector, t: float) -> float:
+    def prox(self, v: Array, t: float) -> Array:
         """
         argmin |x|^2 /2 + |x - v|^2 /2t
         x + (x - v)/t = 0
@@ -91,8 +93,11 @@ class SumOfSquares:
     # def matrix(self) -> DenseMatrix:
     #     return np.eye(self.m)
 
-    def cvxpy_expression(self, x: cp.Expression) -> cp.Expression:
-        return cp.sum_squares(x)
+    def cvxpy_expression(
+        self,
+        x: cp.Expression,  # type: ignore[name-defined]
+    ) -> cp.Expression:  # type: ignore[name-defined]
+        return cp.sum_squares(x)  # type: ignore[name-defined]
 
     def to_explicit_quadratic(self) -> ExplicitQuadraticFunction:
         m = int(np.prod(self.shape))
@@ -103,67 +108,15 @@ class SumOfSquares:
         )
 
 
-# @dataclass
-# class QuadForm:
-#     """
-#     x' q x / 2
-#     """
-#
-#     q: LinearOperator
-#
-#     def __call__(self, x: Vector) -> float:
-#         return (x @ (self.q.matvec(x))) / 2
-#
-#     def prox(self, v: Vector, t: float) -> Vector:
-#         """
-#         argmin x' q x / 2 + |x - v|^2 / 2t
-#         t q x + (x - v) = 0
-#         (tq + I) x = v
-#         x = (tq + I)^-1 v
-#         """
-#         # todo: factorization caching
-#         raise NotImplementedError
-#         return np.linalg.solve(t * self.q + np.eye(self.q.shape[0]), v)
-#
-#     def to_explicit_quadratic(self) -> ExplicitQuadraticFunction:
-#         return ExplicitQuadraticFunction.quadratic_form(self.q)
-#
-#     def cvxpy_expression(self, x: cp.Expression) -> cp.Expression:
-#         return cp.quad_form(x, self.q.as_sparse_matrix(), assume_PSD=True)
-
-
-# @dataclass
-# # todo: is this class even used?
-# # todo: implement a matrix method (kron(I, q) or kron(q, I) I always get confused)
-# class MatrixQuadForm:
-#     """
-#     tr(mat(x)' q max(x)) / 2
-#     """
-#
-#     q: DenseMatrix
-#
-#     def __call__(self, x: Vector) -> float:
-#         # todo: einsum
-#         x = x.reshape((self.q.shape[0], -1))
-#         qx = self.q @ x
-#         return np.sum(x * qx) / 2
-#
-#     def prox(self, v: Vector, t: float) -> Vector:
-#         v = v.reshape((self.q.shape[0], -1))
-#         return np.linalg.solve(self.q * t + np.eye(self.q.shape[0]), v).ravel()
-
-
-def soft_threshold(
-    x: npt.NDArray[np.float64], thresh: float
-) -> npt.NDArray[np.float64]:
+def soft_threshold(x: Array, thresh: float) -> Array:
     return np.clip(x - thresh, 0.0, None) - np.clip(-x - thresh, 0.0, None)
 
 
 class L1:
-    def __call__(self, x: Vector) -> float:
+    def __call__(self, x: Array) -> float:
         return float(np.sum(np.abs(x)))
 
-    def prox(self, v: Vector, t: float) -> Vector:
+    def prox(self, v: Array, t: float) -> Array:
         """
         argmin |x| + 1/2t |x - v|^2
         sign(x) + (x - v)/t = 0
@@ -176,15 +129,18 @@ class L1:
 
 @dataclass
 class NonNegativeIndicator:
-    def __call__(self, x: Vector) -> float:
+    def __call__(self, x: Array) -> float:
         return float("inf") if (x < 0).any() else 0.0
 
-    def prox(self, v: Vector, t: float) -> Vector:
+    def prox(self, v: Array, t: float) -> Array:
         return np.clip(v, 0.0, None)
 
 
+EinsumPath = list[str | tuple[int, ...]]
+
+
 @dataclass
-class TensorQuadForm:
+class TensorQuadForm(QuadraticScalarFunction[Array], ProxableScalarFunction[Array]):
     axis: int
     dims: tuple[int, ...]
     a: npt.NDArray[
@@ -192,7 +148,7 @@ class TensorQuadForm:
     ]  # todo: could also be a pydata.sparse array, which also supports tensordot
 
     @cached_property
-    def call_einsum_args(self):
+    def call_einsum_args(self) -> tuple[str, EinsumPath]:
         all_letters = string.ascii_letters
         summation_index1 = all_letters[-1]
         summation_index2 = all_letters[self.axis]
@@ -206,7 +162,7 @@ class TensorQuadForm:
         return subscripts, path
 
     @cached_property
-    def prox_einsum_args(self):
+    def prox_einsum_args(self) -> tuple[str, EinsumPath]:
         all_letters = string.ascii_letters
         summation_index1 = all_letters[-1]
         summation_index2 = all_letters[self.axis]
@@ -219,14 +175,14 @@ class TensorQuadForm:
         path, path_str = np.einsum_path(subscripts, self.a, x, optimize="optimal")
         return subscripts, path
 
-    def __call__(self, x: npt.NDArray[np.float64]) -> float:
+    def __call__(self, x: Array) -> float:
         subscripts, path = self.call_einsum_args
         out = np.einsum(subscripts, x, self.a, x, optimize=path)
         return float(out) / 2
         # ax = np.tensordot(self.a, x, axes=(1, self.axis))
         # return (x.ravel() @ ax.ravel()) / 2
 
-    def prox(self, v: npt.NDArray[np.float64], t: float) -> npt.NDArray[np.float64]:
+    def prox(self, v: Array, t: float) -> Array:
         """
         argmin x' a x / 2 + |x - v|^2 / 2t
         t a x + (x - v) = 0
@@ -238,8 +194,7 @@ class TensorQuadForm:
         """
         p = np.linalg.inv(t * self.a + np.eye(self.a.shape[0]))
         subscripts, path = self.prox_einsum_args
-        x = np.einsum(subscripts, p, v, optimize=path)
-        return x
+        return np.einsum(subscripts, p, v, optimize=path)  # type: ignore[no-any-return]
 
     def to_explicit_quadratic(self) -> ExplicitQuadraticFunction:
         return ExplicitQuadraticFunction.quadratic_form(
@@ -250,6 +205,9 @@ class TensorQuadForm:
             )
         )
 
-    def cvxpy_expression(self, x: cp.Expression) -> cp.Expression:
+    def cvxpy_expression(
+        self,
+        x: cp.Expression,  # type: ignore[name-defined]
+    ) -> cp.Expression:  # type: ignore[name-defined]
         q = self.to_explicit_quadratic().q.as_sparse_matrix()
-        return cp.quad_form(x, q, assume_PSD=True) / 2
+        return cp.quad_form(x, q, assume_PSD=True) / 2  # type: ignore[attr-defined]

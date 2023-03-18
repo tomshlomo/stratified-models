@@ -7,8 +7,7 @@ import numpy as np
 import scipy
 from numpy import typing as npt
 
-Vector = npt.NDArray[np.float64]
-NumpyArray = npt.NDArray[np.float64]
+from stratified_models.scalar_function import Array
 
 
 class LinearOperator:
@@ -17,7 +16,7 @@ class LinearOperator:
         pass
 
     @abstractmethod
-    def matvec(self, x: Vector) -> Vector:
+    def matvec(self, x: Array) -> Array:
         # todo: should also support matrix-matrix
         #  multiplication, or even a general tensor dot
         #  with a specified axis (which is defaulted to 0)
@@ -36,7 +35,7 @@ class LinearOperator:
         return scipy.sparse.linalg.aslinearoperator(self)
 
     @property
-    def dtype(self):
+    def dtype(self) -> type:
         return np.float64
 
 
@@ -48,7 +47,7 @@ class MatrixBasedLinearOperator(LinearOperator):
     def size(self) -> int:
         return self.a.shape[0]
 
-    def matvec(self, x: Vector) -> Vector:
+    def matvec(self, x: Array) -> Array:
         return self.a @ x
 
     def as_sparse_matrix(self) -> scipy.sparse.spmatrix:
@@ -70,7 +69,7 @@ class RepeatedLinearOperator(LinearOperator):
     def size(self) -> int:
         return self.base_op.size() * self.repetitions
 
-    def matvec(self, x: Vector) -> Vector:
+    def matvec(self, x: Array) -> Array:
         xt = x.reshape((self.base_op.size(), -1), order="F")
         out = self.base_op.matvec(
             xt
@@ -94,7 +93,7 @@ class BlockDiagonalLinearOperator(LinearOperator):
     def size(self) -> int:
         return self.m * self.k
 
-    def matvec(self, x: Vector) -> Vector:
+    def matvec(self, x: Array) -> Array:
         out = np.zeros(x.shape)
         for i, block in self.blocks.items():
             slice_ = slice(i * self.m, (i + 1) * self.m)
@@ -118,7 +117,7 @@ class Identity(LinearOperator):
     def size(self) -> int:
         return self.m
 
-    def matvec(self, x: Vector) -> Vector:
+    def matvec(self, x: Array) -> Array:
         return x
 
     def as_sparse_matrix(self) -> scipy.sparse.spmatrix:
@@ -133,8 +132,10 @@ class SumOfLinearOperators(LinearOperator):
     def size(self) -> int:
         return self.m
 
-    def matvec(self, x: Vector) -> Vector:
-        return sum(op.matvec(x) * gamma for op, gamma in self.components)
+    def matvec(self, x: Array) -> Array:
+        return sum(
+            op.matvec(x) * gamma for op, gamma in self.components
+        )  # type: ignore[return-value]
 
     def as_sparse_matrix(self) -> scipy.sparse.spmatrix:
         return sum(op.as_sparse_matrix() * gamma for op, gamma in self.components)
@@ -150,7 +151,7 @@ class FlattenedTensorDot(LinearOperator):
     def size(self) -> int:
         return int(np.prod(self.dims))
 
-    def matvec(self, x: Vector) -> Vector:
+    def matvec(self, x: Array) -> Array:
         x = x.reshape(self.dims)
         # todo: these 2 lines can be replaced with an einsum (faster)
         ax = np.tensordot(self.a, x, axes=(1, self.axis))

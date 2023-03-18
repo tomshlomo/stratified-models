@@ -3,14 +3,16 @@ import pandas as pd
 from cvxpy.expressions.variable import Variable
 from cvxpy.problems.problem import Minimize, Problem  # type: ignore
 
-from stratified_models.fitters.fitter import Fitter
-from stratified_models.fitters.protocols import Theta
+from stratified_models.fitters.fitter import Fitter, Theta
 from stratified_models.problem import StratifiedLinearRegressionProblem
-from stratified_models.scalar_function import ScalarFunction
+from stratified_models.scalar_function import Array, ScalarFunction
 
 
-class CVXPYScalarFunction(ScalarFunction):
-    def cvxpy_expression(self, x: cp.Expression) -> cp.Expression:
+class CVXPYScalarFunction(ScalarFunction[Array]):
+    def cvxpy_expression(
+        self,
+        x: cp.Expression,  # type: ignore[name-defined]
+    ) -> cp.Expression:  # type: ignore[name-defined]
         pass
 
 
@@ -45,7 +47,7 @@ class CVXPYFitter(Fitter[CVXPYScalarFunction]):
         self,
         theta: Variable,
         problem: StratifiedLinearRegressionProblem[CVXPYScalarFunction],
-    ) -> cp.Expression:
+    ) -> cp.Expression:  # type: ignore[name-defined]
         return sum(
             (
                 func.cvxpy_expression(theta) * gamma
@@ -58,7 +60,7 @@ class CVXPYFitter(Fitter[CVXPYScalarFunction]):
         self,
         theta: Variable,
         problem: StratifiedLinearRegressionProblem[CVXPYScalarFunction],
-    ) -> cp.Expression:
+    ) -> cp.Expression:  # type: ignore[name-defined]
         loss_expr = 0.0
         for loss, node in problem.loss_iter():
             node_index = problem.get_node_flat_index(node)
@@ -69,7 +71,7 @@ class CVXPYFitter(Fitter[CVXPYScalarFunction]):
         self,
         theta: Variable,
         problem: StratifiedLinearRegressionProblem[CVXPYScalarFunction],
-    ) -> cp.Expression:
+    ) -> cp.Expression:  # type: ignore[name-defined]
         theta_flat = theta.flatten(order="C")
         return sum(
             gamma * laplacian.cvxpy_expression(theta_flat)

@@ -3,17 +3,16 @@ from typing import Generic, Hashable, TypeVar
 
 import pandas as pd
 
-from stratified_models.scalar_function import ScalarFunction
+from stratified_models.scalar_function import Array, ScalarFunction
 
-Node = TypeVar("Node")
-F = TypeVar("F", bound=ScalarFunction)
+F = TypeVar("F", bound=ScalarFunction[Array], covariant=True)
 
 
-class RegularizationGraph(Generic[Node, F]):
+class RegularizationGraph(Generic[F]):
     def __init__(self, nodes: pd.Index):
         self.nodes = nodes
 
-    def get_node_index(self, node: Node) -> int:
+    def get_node_index(self, node: Hashable) -> int:
         return self.nodes.get_loc(node)  # type:ignore[no-any-return]
 
     def number_of_nodes(self) -> int:

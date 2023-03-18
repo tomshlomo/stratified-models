@@ -3,13 +3,12 @@ import pandas as pd
 import scipy
 
 from stratified_models.regularization_graph.regularization_graph import (
-    Node,
     RegularizationGraph,
 )
 from stratified_models.scalar_function import TensorQuadForm
 
 
-class NetworkXRegularizationGraph(RegularizationGraph[Node, TensorQuadForm]):
+class NetworkXRegularizationGraph(RegularizationGraph[TensorQuadForm]):
     # todo:rename to simply "WEIGHT_KEY", and change value to simply "weight"
     # todo: should be a parameter to constructor, with default value "weight"
     LAPLACE_REG_PARAM_KEY = "laplace_reg_param"
@@ -30,19 +29,3 @@ class NetworkXRegularizationGraph(RegularizationGraph[Node, TensorQuadForm]):
 
     def laplacian_matrix(self) -> scipy.sparse.spmatrix:
         return self._laplacian_matrix
-
-    # def laplacian_mult(self, x: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
-    #     return self._laplacian_matrix @ x
-    #
-    # def gft(self, x: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
-    #     _, u = self.laplacian_eig()
-    #     return u.T @ x
-    #
-    # def igft(self, x: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
-    #     _, u = self.laplacian_eig()
-    #     return u @ x
-    #
-    # def spectrum(self) -> npt.NDArray[np.float64]:
-    #     return self.laplacian_eig()[0]
-    #
-    #
