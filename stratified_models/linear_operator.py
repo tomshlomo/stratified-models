@@ -152,6 +152,7 @@ class FlattenedTensorDot(LinearOperator):
 
     def matvec(self, x: Vector) -> Vector:
         x = x.reshape(self.dims)
+        # todo: these 2 lines can be replaced with an einsum (faster)
         ax = np.tensordot(self.a, x, axes=(1, self.axis))
         ax = ax.swapaxes(0, self.axis)
         return ax.ravel()

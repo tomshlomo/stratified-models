@@ -39,14 +39,14 @@ class SumOfSquaresLoss:
 
     def prox(self, v: Vector, t: float) -> Vector:
         """
-        argmin 1/2 |ax-b|^2 + rho/2 |x - v|^2
-        a'(ax-b) + rho (x -v) = 0
-        (a'a + rho I) x = rho v + a'b
-        (a'a/rho + I) x = v + a'b/rho
+        argmin 1/2 |ax-b|^2 + 1/2t |x - v|^2
+        a'(ax-b) + 1/t (x -v) = 0
+        (a'a + 1/t I) x = 1/t v + a'b
+        (a'a + 1/t I) x = 1/t v + a'b
         """
         m = self.a.shape[1]
-        rhs = v + self.a.T @ self.b * t
-        q = self.a.T @ self.a + np.eye(m)
+        rhs = v / t + self.a.T @ self.b
+        q = self.a.T @ self.a + np.eye(m) / t
         # todo: factorization caching
         # todo: invert aa' instead if a'a it is faster
         return np.linalg.solve(q, rhs)

@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import string
 from dataclasses import dataclass
-from typing import Protocol, TypeVar
+from functools import cached_property
+from typing import Generic, Protocol, TypeVar
 
 import cvxpy as cp
 import numpy as np
@@ -18,6 +20,34 @@ DenseMatrix = npt.NDArray[np.float64]
 class ScalarFunction(Protocol[T]):
     def __call__(self, x: T) -> float:
         pass
+
+
+# K = TypeVar('K', bound=Hashable)
+#
+#
+# class Mappable(Protocol[K, T]):
+#     def __getitem__(self, k: K) -> T:
+#         pass
+#
+#
+# class SeparableFunction(Mappable[K, T]):
+#     f: dict[K, ScalarFunction]
+#
+#     def __call__(self, x: Mappable[K, T]) -> float:
+#         return sum(f(x[k]) for k, f in self.f.items())
+#
+#     def prox(self, v: Mappable[K, T], t: float) -> Mappable[K, T]:
+#         for k, f in self.f.items():
+#             x[k] = f.prox(v[k], t)
+
+
+@dataclass
+class Zero(Generic[T]):
+    def __call__(self, x: T) -> float:
+        return 0.0
+
+    def prox(self, v: T, t: float) -> T:
+        return v
 
 
 class QuadraticScalarFunction(ScalarFunction[T]):
@@ -44,10 +74,10 @@ class SumOfSquares:
     x in R^m
     """
 
-    m: int
+    shape: int | tuple[int, ...]
 
     def __call__(self, x: Vector) -> float:
-        return (x @ x) / 2
+        return (x.ravel() @ x.ravel()) / 2
 
     def prox(self, v: Vector, t: float) -> float:
         """
@@ -65,9 +95,10 @@ class SumOfSquares:
         return cp.sum_squares(x)
 
     def to_explicit_quadratic(self) -> ExplicitQuadraticFunction:
+        m = int(np.prod(self.shape))
         return ExplicitQuadraticFunction(
-            q=Identity(self.m),
-            c=np.zeros(self.m),
+            q=Identity(m),
+            c=np.zeros(m),
             d=0.0,
         )
 
@@ -134,7 +165,11 @@ class L1:
 
     def prox(self, v: Vector, t: float) -> Vector:
         """
-        argmin gamma |x| + rho/2 |x - v|^2
+        argmin |x| + 1/2t |x - v|^2
+        sign(x) + (x - v)/t = 0
+        assume x is positive:
+        t + x - v = 0
+        x = v - t
         """
         return soft_threshold(v, t)
 
@@ -156,12 +191,55 @@ class TensorQuadForm:
         np.float64
     ]  # todo: could also be a pydata.sparse array, which also supports tensordot
 
+    @cached_property
+    def call_einsum_args(self):
+        all_letters = string.ascii_letters
+        summation_index1 = all_letters[-1]
+        summation_index2 = all_letters[self.axis]
+        x2_subs = all_letters[: len(self.dims)]
+        a_subs = summation_index1 + summation_index2
+        x1_subs = x2_subs.replace(summation_index2, summation_index1, 1)
+        subscripts = f"{x1_subs},{a_subs},{x2_subs}"
+
+        x = np.empty(self.dims, dtype=self.a.dtype)
+        path, path_str = np.einsum_path(subscripts, x, self.a, x, optimize="optimal")
+        return subscripts, path
+
+    @cached_property
+    def prox_einsum_args(self):
+        all_letters = string.ascii_letters
+        summation_index1 = all_letters[-1]
+        summation_index2 = all_letters[self.axis]
+        x2_subs = all_letters[: len(self.dims)]
+        a_subs = summation_index1 + summation_index2
+        out_subs = x2_subs.replace(summation_index2, summation_index1)
+        subscripts = f"{a_subs},{x2_subs}->{out_subs}"
+
+        x = np.empty(self.dims, dtype=self.a.dtype)
+        path, path_str = np.einsum_path(subscripts, self.a, x, optimize="optimal")
+        return subscripts, path
+
     def __call__(self, x: npt.NDArray[np.float64]) -> float:
-        raise NotImplementedError(
-            "there is a problem here since the concetenated dim of tensor dot is 0"
-        )
-        ax = np.tensordot(self.a, x, axes=(1, self.axis))
-        return (x.ravel() @ ax.ravel()) / 2
+        subscripts, path = self.call_einsum_args
+        out = np.einsum(subscripts, x, self.a, x, optimize=path)
+        return float(out) / 2
+        # ax = np.tensordot(self.a, x, axes=(1, self.axis))
+        # return (x.ravel() @ ax.ravel()) / 2
+
+    def prox(self, v: npt.NDArray[np.float64], t: float) -> npt.NDArray[np.float64]:
+        """
+        argmin x' a x / 2 + |x - v|^2 / 2t
+        t a x + (x - v) = 0
+        (ta + I) x = v
+        x = (ta + I)^-1 v
+        :param v:
+        :param t:
+        :return:
+        """
+        p = np.linalg.inv(t * self.a + np.eye(self.a.shape[0]))
+        subscripts, path = self.prox_einsum_args
+        x = np.einsum(subscripts, p, v, optimize=path)
+        return x
 
     def to_explicit_quadratic(self) -> ExplicitQuadraticFunction:
         return ExplicitQuadraticFunction.quadratic_form(

@@ -6,13 +6,13 @@ import numpy as np
 import pandas as pd
 import scipy
 
-from stratified_models.fitters.admm_fitter2 import ADMMFitter2
-from stratified_models.fitters.direct_fitter import DirectFitter
-from stratified_models.fitters.protocols import Costs
-from stratified_models.models import StratifiedLinearRegression
+from stratified_models.fitters.admm_fitter import ADMMFitter
+from stratified_models.losses import SumOfSquaresLossFactory
+from stratified_models.problem import StratifiedLinearRegressionProblem
 from stratified_models.regularization_graph.networkx_graph import (
     NetworkXRegularizationGraph,
 )
+from stratified_models.scalar_function import SumOfSquares
 from stratified_models.utils.networkx_utils import cartesian_product
 
 RNG = np.random.default_rng(42)
@@ -24,7 +24,7 @@ class DataGenerator:
     m: int = 10
     graphs: list[Tuple[nx.Graph, float]] = field(
         default_factory=lambda: [
-            # (nx.cycle_graph(200), 0.9),
+            (nx.cycle_graph(20), 0.9),
             (nx.path_graph(10), 0.5),
             (nx.path_graph(12), 0.1),
         ]
@@ -93,25 +93,16 @@ if __name__ == "__main__":
     graphs = []
     for (graph, weight), name in zip(gen.graphs, gen.stratification_features()):
         reg = 1 / (1 - weight)
-        nx.set_edge_attributes(
-            graph, reg, NetworkXRegularizationGraph.LAPLACE_REG_PARAM_KEY
-        )
-        graphs.append(NetworkXRegularizationGraph(graph, name))
-    fitter = ADMMFitter2()
-    model = StratifiedLinearRegression(
-        fitter=fitter,
+        # nx.set_edge_attributes(
+        #     graph, reg, NetworkXRegularizationGraph.LAPLACE_REG_PARAM_KEY
+        # )
+        graphs.append((NetworkXRegularizationGraph(graph, name), reg))
+    problem = StratifiedLinearRegressionProblem(
+        x=df,
+        y=y,
+        loss_factory=SumOfSquaresLossFactory(),
+        regularizers=[(SumOfSquares(len(gen.regression_features())), 100)],
         graphs=graphs,
-        l2_reg=100,
-        regression_columns=gen.regression_features(),
+        regression_features=gen.regression_features(),
     )
-    model.fit(df, y)
-    model2 = StratifiedLinearRegression(
-        fitter=DirectFitter(),
-        graphs=graphs,
-        l2_reg=100,
-        regression_columns=gen.regression_features(),
-    )
-    model2.fit(df, y)
-    cost = Costs.from_problem_and_theta(model.get_problem(df, y), model.theta)
-    cost2 = Costs.from_problem_and_theta(model.get_problem(df, y), model2.theta)
-    pass
+    theta = ADMMFitter().fit(problem)
