@@ -3,16 +3,14 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import numpy as np
-import numpy.typing as npt
 
 from stratified_models.linear_operator import (
+    Array,
     BlockDiagonalLinearOperator,
     LinearOperator,
     RepeatedLinearOperator,
     SumOfLinearOperators,
 )
-
-Array = npt.NDArray[np.float64]
 
 # class QuadraticFunction(Protocol):
 #     def __call__(self, x: Vector) -> float:

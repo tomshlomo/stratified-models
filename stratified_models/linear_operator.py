@@ -7,7 +7,7 @@ import numpy as np
 import scipy
 from numpy import typing as npt
 
-from stratified_models.scalar_function import Array
+Array = npt.NDArray[np.float64]
 
 
 class LinearOperator:
