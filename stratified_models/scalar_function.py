@@ -97,7 +97,7 @@ class SumOfSquares(ProxableScalarFunction[Array], QuadraticScalarFunction[Array]
         self,
         x: cp.Expression,  # type: ignore[name-defined]
     ) -> cp.Expression:  # type: ignore[name-defined]
-        return cp.sum_squares(x)  # type: ignore[name-defined]
+        return cp.sum_squares(x)  # type: ignore[attr-defined]
 
     def to_explicit_quadratic(self) -> ExplicitQuadraticFunction:
         m = int(np.prod(self.shape))
