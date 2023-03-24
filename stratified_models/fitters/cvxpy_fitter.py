@@ -1,58 +1,81 @@
-from typing import Tuple
+from typing import Protocol
 
-import networkx as nx
+import cvxpy as cp
 import pandas as pd
-from cvxpy.atoms.sum_squares import sum_squares
 from cvxpy.expressions.variable import Variable
 from cvxpy.problems.problem import Minimize, Problem  # type: ignore
 
-from stratified_models.fitters.protocols import (
-    LAPLACE_REG_PARAM_KEY,
-    Node,
-    NodeData,
-    Theta,
-)
-from stratified_models.utils.networkx_utils import cartesian_product
+from stratified_models.fitters.fitter import Fitter, Theta
+from stratified_models.problem import StratifiedLinearRegressionProblem
+from stratified_models.scalar_function import Array, ScalarFunction
 
 
-class CVXPYFitter:
+class CVXPYScalarFunction(ScalarFunction[Array], Protocol):
+    def cvxpy_expression(
+        self,
+        x: cp.Expression,  # type: ignore[name-defined]
+    ) -> cp.Expression:  # type: ignore[name-defined]
+        raise NotImplementedError
+
+
+class CVXPYFitter(Fitter[CVXPYScalarFunction]):
     def fit(
-        self,
-        nodes_data: dict[Node, NodeData],
-        graphs: dict[str, nx.Graph],
-        l2_reg: float,
-        m: int,
+        self, problem: StratifiedLinearRegressionProblem[CVXPYScalarFunction]
     ) -> Theta:
-        graph = cartesian_product(graphs.values())
-        problem, theta_vars = self._build_problem(
-            nodes_data=nodes_data, graph=graph, l2_reg=l2_reg, m=m
-        )
+        cvxpy_problem, theta_vars = self._build_cvxpy_problem(problem)
         # todo: verbose flag, select solver
-        problem.solve(verbose=True)  # type: ignore
-        theta_df = pd.DataFrame(
-            {node: theta_var.value for node, theta_var in theta_vars.items()}
-        ).T
-        theta_df.index.names = graphs.keys()
-        return theta_df
+        cvxpy_problem.solve(verbose=True)  # type: ignore
+        theta_df = pd.DataFrame(  # todo: should be a common function
+            theta_vars.value,
+            index=pd.MultiIndex.from_product(
+                graph.nodes for graph, _ in problem.graphs
+            ),
+            columns=problem.regression_features,
+        )
+        return Theta(df=theta_df)
 
-    def _build_problem(
+    def _build_cvxpy_problem(
         self,
-        nodes_data: dict[Node, NodeData],
-        graph: nx.Graph,
-        l2_reg: float,
-        m: int,
-    ) -> Tuple[Problem, dict[Node, Variable]]:
-        cost = 0.0
-        theta = {}
-
-        for node in graph.nodes():
-            theta[node] = Variable(m)
-            cost += l2_reg * sum_squares(theta[node])  # type: ignore
-            if node_data := nodes_data.get(node):
-                y_pred = node_data.x @ theta[node]
-                cost += sum_squares(y_pred - node_data.y)  # type: ignore
-
-        for u, v, edge_data in graph.edges(data=True):
-            gamma = edge_data[LAPLACE_REG_PARAM_KEY]
-            cost += gamma * sum_squares(theta[u] - theta[v])  # type: ignore
+        problem: StratifiedLinearRegressionProblem[CVXPYScalarFunction],
+    ) -> tuple[Problem, Variable]:
+        theta = Variable(problem.theta_flat_shape())
+        loss = self._get_loss(theta, problem)
+        local_reg = self._get_local_reg(theta, problem)
+        laplace_reg = self._get_laplace_reg(theta, problem)
+        cost = loss + local_reg + laplace_reg
         return Problem(Minimize(cost)), theta
+
+    def _get_local_reg(
+        self,
+        theta: Variable,
+        problem: StratifiedLinearRegressionProblem[CVXPYScalarFunction],
+    ) -> cp.Expression:  # type: ignore[name-defined]
+        return sum(
+            (
+                func.cvxpy_expression(theta) * gamma
+                for func, gamma in problem.regularizers
+                if gamma
+            )
+        )
+
+    def _get_loss(
+        self,
+        theta: Variable,
+        problem: StratifiedLinearRegressionProblem[CVXPYScalarFunction],
+    ) -> cp.Expression:  # type: ignore[name-defined]
+        loss_expr = 0.0
+        for loss, node in problem.loss_iter():
+            node_index = problem.get_node_flat_index(node)
+            loss_expr += loss.cvxpy_expression(theta[node_index])
+        return loss_expr
+
+    def _get_laplace_reg(
+        self,
+        theta: Variable,
+        problem: StratifiedLinearRegressionProblem[CVXPYScalarFunction],
+    ) -> cp.Expression:  # type: ignore[name-defined]
+        theta_flat = theta.flatten(order="C")
+        return sum(
+            gamma * laplacian.cvxpy_expression(theta_flat)
+            for laplacian, gamma in problem.laplacians()
+        )
