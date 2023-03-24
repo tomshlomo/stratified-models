@@ -2,6 +2,7 @@ import numpy as np
 
 from stratified_models.linear_operator import (
     BlockDiagonalLinearOperator,
+    Identity,
     MatrixBasedLinearOperator,
     RepeatedLinearOperator,
 )
@@ -31,8 +32,8 @@ def test_block_diagonal_linear_operator() -> None:
     m = 5
     k = 3
     blocks = {
-        0: np.arange(m**2).reshape((m, m)),
-        2: np.eye(m),
+        0: MatrixBasedLinearOperator(np.arange(m**2).reshape((m, m))),
+        2: Identity(m),
     }
     op = BlockDiagonalLinearOperator(blocks=blocks, m=m, k=k)
     assert op.size() == m * k
