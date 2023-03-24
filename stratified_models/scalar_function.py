@@ -3,7 +3,7 @@ from __future__ import annotations
 import string
 from dataclasses import dataclass
 from functools import cached_property
-from typing import Generic, Protocol, TypeVar
+from typing import Generic, Protocol, TypeVar, Union
 
 import cvxpy as cp
 import numpy as np
@@ -18,26 +18,7 @@ Array = npt.NDArray[np.float64]
 
 class ScalarFunction(Protocol[T]):
     def __call__(self, x: T) -> float:
-        pass
-
-
-# K = TypeVar('K', bound=Hashable)
-#
-#
-# class Mappable(Protocol[K, T]):
-#     def __getitem__(self, k: K) -> T:
-#         pass
-#
-#
-# class SeparableFunction(Mappable[K, T]):
-#     f: dict[K, ScalarFunction]
-#
-#     def __call__(self, x: Mappable[K, T]) -> float:
-#         return sum(f(x[k]) for k, f in self.f.items())
-#
-#     def prox(self, v: Mappable[K, T], t: float) -> Mappable[K, T]:
-#         for k, f in self.f.items():
-#             x[k] = f.prox(v[k], t)
+        raise NotImplementedError
 
 
 class QuadraticScalarFunction(ScalarFunction[T], Protocol):
@@ -46,10 +27,7 @@ class QuadraticScalarFunction(ScalarFunction[T], Protocol):
     """
 
     def to_explicit_quadratic(self) -> ExplicitQuadraticFunction:
-        pass
-
-    # def dense_matrix(self) -> DenseMatrix:
-    #     pass
+        raise NotImplementedError
 
 
 X = TypeVar("X")
@@ -90,9 +68,6 @@ class SumOfSquares(ProxableScalarFunction[Array], QuadraticScalarFunction[Array]
         """
         return v / (1 + t)
 
-    # def matrix(self) -> DenseMatrix:
-    #     return np.eye(self.m)
-
     def cvxpy_expression(
         self,
         x: cp.Expression,  # type: ignore[name-defined]
@@ -106,6 +81,35 @@ class SumOfSquares(ProxableScalarFunction[Array], QuadraticScalarFunction[Array]
             c=np.zeros(m),
             d=0.0,
         )
+
+
+# @dataclass
+# class Affine(ProxableScalarFunction[Array], QuadraticScalarFunction[Array]):
+#     """
+#     x |-> c'x + d
+#     x in R^m
+#     """
+#     c: Array
+#     d: float
+#
+#     def __call__(self, x: Array) -> float:
+#         return float((x.ravel() @ self.c.ravel())) + self.d
+#
+#     def prox(self, v: Array, t: float) -> Array:
+#         """
+#         argmin c'x + d + 1/2t |x-v|^2
+#         c + 1/t(x - v) = 0
+#         x = v - tc
+#         """
+#         return v - t * self.c
+#
+#     def to_explicit_quadratic(self) -> ExplicitQuadraticFunction:
+#         m = int(np.prod(self.shape))
+#         return ExplicitQuadraticFunction(
+#             q=Identity(m),
+#             c=np.zeros(m),
+#             d=0.0,
+#         )
 
 
 def soft_threshold(x: Array, thresh: float) -> Array:
@@ -136,7 +140,7 @@ class NonNegativeIndicator:
         return np.clip(v, 0.0, None)
 
 
-EinsumPath = list[str | tuple[int, ...]]
+EinsumPath = list[Union[str, tuple[int, ...]]]
 
 
 @dataclass
@@ -179,8 +183,6 @@ class TensorQuadForm(QuadraticScalarFunction[Array], ProxableScalarFunction[Arra
         subscripts, path = self.call_einsum_args
         out = np.einsum(subscripts, x, self.a, x, optimize=path)
         return float(out) / 2
-        # ax = np.tensordot(self.a, x, axes=(1, self.axis))
-        # return (x.ravel() @ ax.ravel()) / 2
 
     def prox(self, v: Array, t: float) -> Array:
         """

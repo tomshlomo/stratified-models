@@ -1,0 +1,15 @@
+[run]
+omit =
+    */tests/*
+    */__init__.py
+source =
+    stratified_models
+branch = true
+
+[report]
+exclude_lines =
+    pragma: no cover
+    raise NotImplementedError
+    pass
+show_missing = true
+fail_under = 100

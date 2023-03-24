@@ -3,7 +3,12 @@ import numpy as np
 
 from stratified_models.admm.admm import ConsensusADMMSolver, ConsensusProblem
 from stratified_models.losses import SumOfSquaresLoss
-from stratified_models.scalar_function import L1, SumOfSquares, Zero
+from stratified_models.scalar_function import (
+    L1,
+    NonNegativeIndicator,
+    SumOfSquares,
+    Zero,
+)
 
 RNG = np.random.RandomState(42)
 
@@ -78,4 +83,20 @@ def test_lasso() -> None:
         y0=np.zeros((problem.n, m)),
     )
     assert abs(cost - cost_exp) <= 1e-6
+    assert np.linalg.norm(x - x_exp) <= 1e-6
+
+
+def test_non_negative_least_squares() -> None:
+    m = 10
+    b = RNG.standard_normal((m,))
+    problem = ConsensusProblem(
+        f=[(SumOfSquaresLoss(a=np.eye(m), b=b), 1.0)],
+        g=NonNegativeIndicator(),
+    )
+    x, cost, state = ConsensusADMMSolver().solve(
+        problem=problem,
+        x0=np.zeros(m),
+        y0=np.zeros((problem.n, m)),
+    )
+    x_exp = b.clip(min=0)
     assert np.linalg.norm(x - x_exp) <= 1e-6

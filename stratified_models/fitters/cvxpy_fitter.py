@@ -1,3 +1,5 @@
+from typing import Protocol
+
 import cvxpy as cp
 import pandas as pd
 from cvxpy.expressions.variable import Variable
@@ -8,12 +10,12 @@ from stratified_models.problem import StratifiedLinearRegressionProblem
 from stratified_models.scalar_function import Array, ScalarFunction
 
 
-class CVXPYScalarFunction(ScalarFunction[Array]):
+class CVXPYScalarFunction(ScalarFunction[Array], Protocol):
     def cvxpy_expression(
         self,
         x: cp.Expression,  # type: ignore[name-defined]
     ) -> cp.Expression:  # type: ignore[name-defined]
-        pass
+        raise NotImplementedError
 
 
 class CVXPYFitter(Fitter[CVXPYScalarFunction]):

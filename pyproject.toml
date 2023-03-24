@@ -38,28 +38,28 @@ pytest-pycharm = "^0.7.0"
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
 
-[tool.coverage.paths]
-source = ["stratified_models", "*/site-packages"]
-
-[tool.coverage.run]
-branch = true
-source = ["stratified_models"]
-omit = ["stratified_models/models.py", "stratified_models/tests/data_generators.py"]
-
-[tool.coverage.report]
-show_missing = true
-fail_under = 100
+[tool.coverage]
+config_file = ".coveragerc"
+#[tool.coverage.paths]
+#source = ["stratified_models", "*/site-packages"]
+#
+#[tool.coverage.run]
+#branch = true
+#source = ["stratified_models"]
+#omit = ["stratified_models/models.py", "stratified_models/tests/data_generators.py"]
+#
+#[tool.coverage.report]
+#show_missing = true
+#fail_under = 100
 #exclude_lines = [
-#    'pragma: no cover',
-#    'def __repr__',
-#    'if self.debug:',
-#    'if settings.DEBUG',
-#    'raise AssertionError',
-#    'raise NotImplementedError',
-#    'if 0:',
-#    'if __name__ == .__main__.:',
-#    'class .*\bProtocol\):',
-#    '@(abc\.)?abstractmethod',
+#    "pragma: no cover",
+##    "def __repr__",
+##    "if self.debug:",
+##    "if settings.DEBUG",
+##    "raise AssertionError",
+#    "raise NotImplementedError",
+##    "if 0:",
+##    "if __name__ == .__main__.:",
 #]
 
 [tool.mypy]

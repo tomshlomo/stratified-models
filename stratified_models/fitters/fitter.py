@@ -20,7 +20,7 @@ class Theta:
 class Fitter(Generic[F]):
     @abstractmethod
     def fit(self, problem: StratifiedLinearRegressionProblem[F]) -> Theta:
-        pass
+        raise NotImplementedError
 
 
 Q = TypeVar("Q", bound=QuadraticScalarFunction[Array])

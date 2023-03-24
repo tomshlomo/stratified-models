@@ -28,10 +28,6 @@ class ADMMState:
     z: Array
     t: float
 
-    @property
-    def n(self) -> int:
-        return len(self.x)
-
 
 class ConsensusADMMSolver:
     def solve(

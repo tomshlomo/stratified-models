@@ -23,7 +23,7 @@
 # @dataclass
 # class StratifiedLinearRegression:
 #     fitter: StratifiedLinearRegressionFitter[NestedNode]
-#     graphs: list[RegularizationGraph[Node]]
+#     graphs: list[Regula   rizationGraph[Node]]
 #     l2_reg: float
 #     regression_columns: list[str]
 #     theta: Optional[Theta] = None

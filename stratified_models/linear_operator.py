@@ -13,18 +13,18 @@ Array = npt.NDArray[np.float64]
 class LinearOperator:
     @abstractmethod
     def size(self) -> int:
-        pass
+        raise NotImplementedError
 
     @abstractmethod
     def matvec(self, x: Array) -> Array:
         # todo: should also support matrix-matrix
         #  multiplication, or even a general tensor dot
         #  with a specified axis (which is defaulted to 0)
-        pass
+        raise NotImplementedError
 
     @abstractmethod
     def as_sparse_matrix(self) -> scipy.sparse.spmatrix:
-        pass
+        raise NotImplementedError
 
     @property
     def shape(self) -> tuple[int, int]:
@@ -122,6 +122,20 @@ class Identity(LinearOperator):
 
     def as_sparse_matrix(self) -> scipy.sparse.spmatrix:
         return scipy.sparse.eye(self.m)
+
+
+# @dataclass
+# class Zero(LinearOperator):
+#     m: int
+#
+#     def size(self) -> int:
+#         return self.m
+#
+#     def matvec(self, x: Array) -> Array:
+#         return np.zeros(self.m)
+#
+#     def as_sparse_matrix(self) -> scipy.sparse.spmatrix:
+#         return scipy.sparse.csr_matrix((self.m, self.m))
 
 
 @dataclass

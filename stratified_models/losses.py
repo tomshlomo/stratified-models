@@ -23,7 +23,7 @@ L = TypeVar("L", bound=ScalarFunction[Array], covariant=True)
 class LossFactory(Generic[L]):
     @abstractmethod
     def build_loss_function(self, x: pd.DataFrame, y: pd.Series) -> L:
-        pass
+        raise NotImplementedError
 
 
 @dataclass
