@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
 
 import numpy as np
+from tqdm import tqdm
 
 from stratified_models.scalar_function import Array, ProxableScalarFunction
 
@@ -29,7 +31,10 @@ class ADMMState:
     t: float
 
 
+@dataclass
 class ConsensusADMMSolver:
+    max_iterations: int = 1000
+
     def solve(
         self,
         problem: ConsensusProblem,
@@ -40,10 +45,11 @@ class ConsensusADMMSolver:
         assert problem.n == y0.shape[0]
         state = self.get_init_state(x0=x0, y0=y0, t0=t0, problem=problem)
         costs = [[problem.cost(x) for x in state.x] + [problem.cost(state.z)]]
-        for i in range(1000):
+        start = time.time()
+        for i in tqdm(range(self.max_iterations), total=self.max_iterations):
             state = self.step(problem, state)
             costs.append([problem.cost(x) for x in state.x] + [problem.cost(state.z)])
-            print(i, min(costs[-1]))
+            print(f"{i} {time.time() - start:.2f} {min(costs[-1])}")
         return state.z, costs[-1][-1], state
 
     def step(

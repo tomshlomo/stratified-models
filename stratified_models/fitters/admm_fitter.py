@@ -1,9 +1,11 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import Hashable, Iterable
 
 import numpy as np
 import pandas as pd
+import scipy
 
 from stratified_models.admm.admm import ConsensusADMMSolver, ConsensusProblem
 from stratified_models.fitters.fitter import Fitter, Theta
@@ -86,16 +88,16 @@ u <- u + theta - theta_tilde
 """
 
 
-# @dataclass
+@dataclass
 class ADMMFitter(Fitter[ProxableScalarFunction[Array]]):
-    # solver: ConsensusADMMSolver
+    solver: ConsensusADMMSolver = field(default_factory=ConsensusADMMSolver)
 
     def fit(
         self,
         problem: StratifiedLinearRegressionProblem[ProxableScalarFunction[Array]],
     ) -> Theta:
         admm_problem = self._build_admm_problem(problem)
-        theta, cost, final_admm_state = ConsensusADMMSolver().solve(
+        theta, cost, final_admm_state = self.solver.solve(
             admm_problem,
             x0=np.zeros(problem.theta_shape()),
             y0=np.zeros((admm_problem.n, *problem.theta_shape())),
@@ -127,13 +129,45 @@ class ADMMFitter(Fitter[ProxableScalarFunction[Array]]):
             g=Zero(),  # enforce domain constraints?
         )
 
+    def _get_node_clusters(
+        self, problem: StratifiedLinearRegressionProblem
+    ) -> Iterable[NodesCluster]:
+        rows_so_far = 0
+        cols_so_far = 0
+        max_rank = max(1024, problem.m)
+        cluster = NodesCluster.empty()
+        for node, x_slice in problem.x.groupby(problem.stratification_features):
+            size = x_slice.shape[0]
+            if min(rows_so_far + size, cols_so_far + problem.m) > max_rank:
+                yield cluster
+                rows_so_far = 0
+                cols_so_far = 0
+                cluster = NodesCluster.empty()
+            rows_so_far += size
+            cols_so_far += problem.m
+            cluster.nodes.append(node)
+            cluster.x_slices.append(x_slice[problem.regression_features].values)
+            cluster.y_slices.append(problem.y[x_slice.index].values)
+        if not cluster.is_empty:
+            yield cluster
+
     def _get_loss(
         self, problem: StratifiedLinearRegressionProblem[ProxableScalarFunction[Array]]
     ) -> LossForADMM:
         losses = []
-        for loss, node in problem.loss_iter():
-            index = problem.get_node_index(node)
-            losses.append((loss, index))
+        for nodes_cluster in self._get_node_clusters(problem):
+            loss = problem.loss_factory.build_loss_function(
+                x=scipy.sparse.block_diag(nodes_cluster.x_slices),
+                y=np.concatenate(nodes_cluster.y_slices),
+            )
+            losses.append(
+                NodesClusterLossData(
+                    nodes_indices=[
+                        problem.get_node_index(node) for node in nodes_cluster.nodes
+                    ],
+                    loss=loss,
+                )
+            )
         return LossForADMM(losses=losses)
 
     # def _get_laplacian_regularizers(
@@ -144,15 +178,58 @@ class ADMMFitter(Fitter[ProxableScalarFunction[Array]]):
 
 
 @dataclass
+class NodesCluster:
+    nodes: list[Hashable | tuple[Hashable, ...]]
+    x_slices: list[Array]
+    y_slices: list[Array]
+
+    @classmethod
+    def empty(cls):
+        return NodesCluster(
+            nodes=[],
+            x_slices=[],
+            y_slices=[],
+        )
+
+    @property
+    def is_empty(self) -> bool:
+        return not self.nodes
+
+
+@dataclass
+class NodesClusterLossData:
+    nodes_indices: list[tuple[int, ...]]
+    loss: ProxableScalarFunction[Array]
+
+    @property
+    def size(self) -> int:
+        return len(self.nodes_indices)
+
+
+@dataclass
 class LossForADMM(ProxableScalarFunction[Array]):
-    losses: list[tuple[ProxableScalarFunction[Array], tuple[int, ...]]]
+    losses: list[NodesClusterLossData]
+
+    @staticmethod
+    def _concatenate_variables_cluster(
+        x: Array, cluster: NodesClusterLossData
+    ) -> Array:
+        return np.concatenate([x[index] for index in cluster.nodes_indices])
 
     def __call__(self, x: Array) -> float:
-        return sum(loss(x[index]) for loss, index in self.losses)
+        return sum(
+            loss_data.loss(self._concatenate_variables_cluster(x, loss_data))
+            for loss_data in self.losses
+        )
 
     def prox(self, v: Array, t: float) -> Array:
         x = v.copy()
-        for loss, index in self.losses:
-            local_theta = v[index]
-            x[index] = loss.prox(local_theta, t)
+        for loss_data in self.losses:
+            x_local = loss_data.loss.prox(
+                v=self._concatenate_variables_cluster(v, loss_data),
+                t=t,
+            )
+            x_local = x_local.reshape((loss_data.size, -1))
+            for i, x_node in zip(loss_data.nodes_indices, x_local):
+                x[i] = x_node
         return x
