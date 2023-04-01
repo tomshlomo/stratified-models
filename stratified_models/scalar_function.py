@@ -2,8 +2,7 @@ from __future__ import annotations
 
 import string
 from dataclasses import dataclass
-from functools import cached_property
-from typing import Generic, Protocol, TypeVar, Union
+from typing import Generic, Optional, Protocol, TypeVar, Union
 
 import cvxpy as cp
 import numpy as np
@@ -144,15 +143,32 @@ EinsumPath = list[Union[str, tuple[int, ...]]]
 
 
 @dataclass
+class _TensorQuadFormProxCache:
+    einsum_subscripts: str
+    einsum_path: EinsumPath
+    u: Array
+    d: Array
+
+
+@dataclass
+class _TensorQuadFormCallCache:
+    einsum_subscripts: str
+    einsum_path: EinsumPath
+
+
+@dataclass
 class TensorQuadForm(QuadraticScalarFunction[Array], ProxableScalarFunction[Array]):
     axis: int
     dims: tuple[int, ...]
     a: npt.NDArray[
         np.float64
     ]  # todo: could also be a pydata.sparse array, which also supports tensordot
+    _call_cache: Optional[_TensorQuadFormCallCache] = None
+    _prox_cache: Optional[_TensorQuadFormProxCache] = None
 
-    @cached_property
-    def call_einsum_args(self) -> tuple[str, EinsumPath]:
+    def _set_call_einsum_args_cache(self) -> None:
+        if self._call_cache:
+            return
         all_letters = string.ascii_letters
         summation_index1 = all_letters[-1]
         summation_index2 = all_letters[self.axis]
@@ -163,24 +179,46 @@ class TensorQuadForm(QuadraticScalarFunction[Array], ProxableScalarFunction[Arra
 
         x = np.empty(self.dims, dtype=self.a.dtype)
         path, path_str = np.einsum_path(subscripts, x, self.a, x, optimize="optimal")
-        return subscripts, path
+        self._call_cache = _TensorQuadFormCallCache(
+            einsum_subscripts=subscripts, einsum_path=path
+        )
 
-    @cached_property
-    def prox_einsum_args(self) -> tuple[str, EinsumPath]:
+    def _set_prox_cache(self) -> None:
+        if self._prox_cache:
+            return
+        einsum_subscripts, einsum_path = self._prox_einsum_args()
+        d, u = np.linalg.eigh(self.a)
+        self._prox_cache = _TensorQuadFormProxCache(
+            einsum_path=einsum_path,
+            einsum_subscripts=einsum_subscripts,
+            d=d,
+            u=u,
+        )
+
+    def _prox_einsum_args(self) -> tuple[str, EinsumPath]:
         all_letters = string.ascii_letters
         summation_index1 = all_letters[-1]
         summation_index2 = all_letters[self.axis]
+        eig_index = all_letters[-2]
         x2_subs = all_letters[: len(self.dims)]
-        a_subs = summation_index1 + summation_index2
+        a_subs = (
+            "nm,m,km".replace("n", summation_index1)
+            .replace("k", summation_index2)
+            .replace("m", eig_index)
+        )
         out_subs = x2_subs.replace(summation_index2, summation_index1)
         subscripts = f"{a_subs},{x2_subs}->{out_subs}"
 
         x = np.empty(self.dims, dtype=self.a.dtype)
-        path, path_str = np.einsum_path(subscripts, self.a, x, optimize="optimal")
+        u = np.empty(self.a.shape, dtype=self.a.dtype)
+        w = np.empty(self.a.shape[0], dtype=self.a.dtype)
+        path, path_str = np.einsum_path(subscripts, u, w, u, x, optimize="optimal")
         return subscripts, path
 
     def __call__(self, x: Array) -> float:
-        subscripts, path = self.call_einsum_args
+        self._set_call_einsum_args_cache()
+        subscripts = self._call_cache.einsum_subscripts
+        path = self._call_cache.einsum_path
         out = np.einsum(subscripts, x, self.a, x, optimize=path)
         return float(out) / 2
 
@@ -190,13 +228,20 @@ class TensorQuadForm(QuadraticScalarFunction[Array], ProxableScalarFunction[Arra
         t a x + (x - v) = 0
         (ta + I) x = v
         x = (ta + I)^-1 v
-        :param v:
-        :param t:
-        :return:
+
+        let a = udu' be the eigen decomposition
+        so:
+        x = uwu'v
+        where w = (td + I)^-1
         """
-        p = np.linalg.inv(t * self.a + np.eye(self.a.shape[0]))
-        subscripts, path = self.prox_einsum_args
-        return np.einsum(subscripts, p, v, optimize=path)  # type: ignore[no-any-return]
+        self._set_prox_cache()
+        u = self._prox_cache.u
+        d = self._prox_cache.d
+        einsum_subscripts = self._prox_cache.einsum_subscripts
+        einsum_path = self._prox_cache.einsum_path
+
+        w = 1 / (t * d + 1)
+        return np.einsum(einsum_subscripts, u, w, u, v, optimize=einsum_path)
 
     def to_explicit_quadratic(self) -> ExplicitQuadraticFunction:
         return ExplicitQuadraticFunction.quadratic_form(

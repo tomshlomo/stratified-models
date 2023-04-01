@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import time
 from dataclasses import dataclass
 
@@ -29,11 +30,22 @@ class ADMMState:
     u: Array
     z: Array
     t: float
+    primal_residual_norm: float
+    dual_residual_norm: float
+
+
+def norm(x: Array) -> float:
+    return math.sqrt(float(x.flatten() @ x.flatten()))
 
 
 @dataclass
 class ConsensusADMMSolver:
     max_iterations: int = 1000
+    eps_abs: float = 1e-5
+    eps_rel: float = 1e-4
+    mu: float = 10.0
+    tau_incr: float = 2.0
+    tau_decr: float = 1 / 2
 
     def solve(
         self,
@@ -50,6 +62,8 @@ class ConsensusADMMSolver:
             state = self.step(problem, state)
             costs.append([problem.cost(x) for x in state.x] + [problem.cost(state.z)])
             print(f"{i} {time.time() - start:.2f} {min(costs[-1])}")
+            if self._stop(state=state, problem=problem):
+                break
         return state.z, costs[-1][-1], state
 
     def step(
@@ -57,29 +71,73 @@ class ConsensusADMMSolver:
         problem: ConsensusProblem,
         state: ADMMState,
     ) -> ADMMState:
+        # t update
+        t, u = self._t_update(problem=problem, state=state)
+
         # x update
         new_x = np.array(
             [
-                f.prox(state.z - u, state.t * gamma)
-                for (f, gamma), x, u in zip(problem.f, state.x, state.u)
+                f.prox(state.z - u, t * gamma)
+                for (f, gamma), x, u in zip(problem.f, state.x, u)
             ]
         )
 
         # z update
-        u_bar = np.mean(state.u, axis=0)
+        u_bar = np.mean(u, axis=0)
         new_x_bar = np.mean(new_x, axis=0)
-        new_z = problem.g.prox(new_x_bar + u_bar, state.t / problem.n)
+        new_z = problem.g.prox(new_x_bar + u_bar, t / problem.n)
 
         # u update
-        new_u = state.u + new_x - new_z
+        primal_residual = new_x - new_z
+        new_u = u + primal_residual
+
+        dual_residual_norm = norm(state.z - new_z) * math.sqrt(problem.n) / t
 
         # todo: t update
         return ADMMState(
             x=new_x,
             z=new_z,
             u=new_u,
-            t=state.t,
+            t=t,
+            dual_residual_norm=dual_residual_norm,
+            primal_residual_norm=norm(primal_residual),
         )
+
+    def _stop(self, state: ADMMState, problem: ConsensusProblem) -> bool:
+        # n is the size of each x
+        # m is the size of z
+        # p is the size of c
+        # in my termns, assuming z.size = m, we have:
+        # n = m * n
+        # m = n
+        # p = m * n
+        eps_abs = math.sqrt(state.x.size) * self.eps_abs
+
+        # dual residual norm
+        # norm(y) = norm(u*rho)=norm(u/t) = norm(u) / sqrt(t)
+        eps_rel_dual = self.eps_rel * norm(state.u) / math.sqrt(state.t)
+        eps_dual = eps_abs + eps_rel_dual
+        if state.dual_residual_norm > eps_dual:
+            return False
+
+        # primal residual norm
+        eps_rel_primal = self.eps_rel * max(
+            [
+                norm(state.x),
+                norm(state.z) * math.sqrt(problem.n),
+            ]
+        )
+        eps_primal = eps_abs + eps_rel_primal
+        return state.primal_residual_norm <= eps_primal
+
+    def _t_update(
+        self, state: ADMMState, problem: ConsensusProblem
+    ) -> tuple[float, Array]:
+        if state.primal_residual_norm >= self.mu * state.dual_residual_norm:
+            return state.t * self.tau_decr, state.u * self.tau_decr
+        if state.dual_residual_norm >= self.mu * state.primal_residual_norm:
+            return state.t * self.tau_incr, state.u * self.tau_incr
+        return state.t, state.u
 
     def get_init_state(
         self,
@@ -93,4 +151,6 @@ class ConsensusADMMSolver:
             z=x0,
             u=y0 * t0,
             t=t0,
+            dual_residual_norm=np.nan,
+            primal_residual_norm=np.nan,
         )
