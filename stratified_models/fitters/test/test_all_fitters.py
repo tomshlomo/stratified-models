@@ -11,7 +11,9 @@ from stratified_models.fitters.fitter import (
     CGSolver,
     DirectSolver,
     Fitter,
+    ProblemUpdate,
     QuadraticProblemFitter,
+    RefitDataType,
 )
 from stratified_models.losses import SumOfSquaresLossFactory
 from stratified_models.problem import StratifiedLinearRegressionProblem
@@ -70,7 +72,7 @@ m_s = [
     2,
 ]
 params = [
-    (1.0, 0.0, 1e-6, [-3, 0, 1, -3, 0, 1]),
+    (1.0, 0.0, 1e-4, [-3, 0, 1, -3, 0, 1]),
     (0.0, 1.0, 1e-6, [-3, -3, -3, 1, 1, 1]),
     (1, 1, 1, None),
     (1e6, 1e6, 1e-10, [-1, -1, -1, -1, -1, -1]),
@@ -94,14 +96,47 @@ fitters = [
 )
 def test_fit(
     m: int,
-    fitter: Fitter[QuadraticScalarFunction[Array]],
+    fitter: Fitter[QuadraticScalarFunction[Array], RefitDataType],
     reg1: float,
     reg2: float,
     l2reg: float,
     theta_exp: list[float],
 ) -> None:
     problem = get_problem(reg1=reg1, reg2=reg2, m=m, n=3, l2_reg=l2reg)
-    theta = fitter.fit(problem)
+    theta, _ = fitter.fit(problem)
+
+    # costs_exp = Costs.from_problem_and_theta(problem, theta)
+    # assert abs(cost - costs_exp.total()) < costs_exp.total() * 1e-3
+    if theta_exp:
+        theta_exp_df = pd.DataFrame(
+            np.tile(theta_exp, (m, 1)),
+            index=problem.regression_features,
+            columns=pd.MultiIndex.from_product(
+                graph.nodes for graph, _ in problem.graphs
+            ),
+        ).T
+        assert ((theta.df - theta_exp_df).abs() < 1e-3).all().all()
+
+
+@pytest.mark.parametrize(
+    ("m", "fitter", "reg1", "reg2", "l2reg", "theta_exp"),
+    [(m, fitter, *p) for m, fitter, p in product(m_s, fitters, params)],
+)
+def test_refit(
+    m: int,
+    fitter: Fitter[QuadraticScalarFunction[Array], RefitDataType],
+    reg1: float,
+    reg2: float,
+    l2reg: float,
+    theta_exp: list[float],
+) -> None:
+    problem = get_problem(reg1=1, reg2=1, m=m, n=3, l2_reg=1)
+    _, refit_data = fitter.fit(problem)
+    problem_update = ProblemUpdate(
+        new_regularization_gammas=[l2reg],
+        new_graph_gammas=[reg1, reg2],
+    )
+    theta, _ = fitter.refit(problem_update=problem_update, refit_data=refit_data)
     # costs_exp = Costs.from_problem_and_theta(problem, theta)
     # assert abs(cost - costs_exp.total()) < costs_exp.total() * 1e-3
     if theta_exp:

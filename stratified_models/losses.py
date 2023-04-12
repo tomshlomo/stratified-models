@@ -52,6 +52,11 @@ class SumOfSquaresLoss(QuadraticScalarFunction[Array], ProxableScalarFunction[Ar
         r = y - self.b
         return float((r @ r) / 2)
 
+    def grad(self, x: Array) -> Array:
+        y = self.a @ x
+        r = y - self.b
+        return self.a.T @ r
+
     def _set_prox_cache(self) -> None:
         atb = self.a.T @ self.b
         if self.is_tall:
@@ -161,6 +166,8 @@ class SumOfSquaresLoss(QuadraticScalarFunction[Array], ProxableScalarFunction[Ar
         return x1
 
     def prox(self, v: Array, t: float) -> Array:
+        if t == 0:
+            return v
         if not self._prox_cache:
             self._set_prox_cache()
         atb = self._prox_cache.atb

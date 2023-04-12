@@ -34,7 +34,10 @@ X = TypeVar("X")
 
 class ProxableScalarFunction(ScalarFunction[X], Protocol):
     def prox(self, v: X, t: float) -> X:
-        pass
+        raise NotImplementedError
+
+    def grad(self, x: X) -> X:
+        raise NotImplementedError
 
 
 @dataclass
@@ -50,7 +53,7 @@ class Zero(Generic[X], ProxableScalarFunction[X]):
 class SumOfSquares(ProxableScalarFunction[Array], QuadraticScalarFunction[Array]):
     """
     x |-> x'x/2
-    x in R^m
+    x in RefitDataType^m
     """
 
     shape: int | tuple[int, ...]
@@ -66,6 +69,9 @@ class SumOfSquares(ProxableScalarFunction[Array], QuadraticScalarFunction[Array]
         x = v/(1+t)
         """
         return v / (1 + t)
+
+    def grad(self, x: Array) -> Array:
+        return x
 
     def cvxpy_expression(
         self,
@@ -86,7 +92,7 @@ class SumOfSquares(ProxableScalarFunction[Array], QuadraticScalarFunction[Array]
 # class Affine(ProxableScalarFunction[Array], QuadraticScalarFunction[Array]):
 #     """
 #     x |-> c'x + d
-#     x in R^m
+#     x in RefitDataType^m
 #     """
 #     c: Array
 #     d: float
@@ -221,6 +227,21 @@ class TensorQuadForm(QuadraticScalarFunction[Array], ProxableScalarFunction[Arra
         path = self._call_cache.einsum_path
         out = np.einsum(subscripts, x, self.a, x, optimize=path)
         return float(out) / 2
+
+    def grad(self, x: Array) -> Array:
+        all_letters = string.ascii_letters
+        out_index = all_letters[-1]
+        summation_index = all_letters[self.axis]
+        x_subs = all_letters[: len(self.dims)]
+        a_subs = out_index + summation_index
+        out_subs = x_subs.replace(summation_index, out_index)
+        subscripts = f"{a_subs},{x_subs}->{out_subs}"
+        out = np.einsum(
+            subscripts,
+            self.a,
+            x,
+        )
+        return out
 
     def prox(self, v: Array, t: float) -> Array:
         """

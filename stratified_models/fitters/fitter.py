@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from abc import abstractmethod
 from dataclasses import dataclass
-from typing import Generic, Optional, TypeVar
+from typing import Optional, Protocol, TypeVar
 
 import pandas as pd
 import scipy
@@ -17,18 +17,83 @@ class Theta:
     df: pd.DataFrame
 
 
-class Fitter(Generic[F]):
-    @abstractmethod
-    def fit(self, problem: StratifiedLinearRegressionProblem[F]) -> Theta:
+@dataclass
+class RefitDataBase:
+    previous_problem: StratifiedLinearRegressionProblem
+
+
+RefitDataType = TypeVar("RefitDataType", bound=RefitDataBase)
+
+
+@dataclass
+class ProblemUpdate:
+    new_regularization_gammas: list[float]
+    new_graph_gammas: list[float]
+
+    # todo: new data? (x and y)
+
+    def apply(
+        self, problem: StratifiedLinearRegressionProblem
+    ) -> StratifiedLinearRegressionProblem:
+        return StratifiedLinearRegressionProblem(
+            x=problem.x,
+            y=problem.y,
+            loss_factory=problem.loss_factory,
+            regularizers=[
+                (f, gamma)
+                for (f, _), gamma in zip(
+                    problem.regularizers, self.new_regularization_gammas
+                )
+            ],
+            graphs=[
+                (graph, gamma)
+                for (graph, _), gamma in zip(problem.graphs, self.new_graph_gammas)
+            ],
+            regression_features=problem.regression_features,
+        )
+
+
+class Fitter(Protocol[F, RefitDataType]):
+    def fit(
+        self,
+        problem: StratifiedLinearRegressionProblem[F],
+    ) -> tuple[Theta, RefitDataType]:
+        raise NotImplementedError
+
+    def refit(
+        self,
+        problem_update: ProblemUpdate,
+        refit_data: RefitDataType,
+    ) -> tuple[Theta, RefitDataType]:
         raise NotImplementedError
 
 
 Q = TypeVar("Q", bound=QuadraticScalarFunction[Array])
 
 
+# todo: not really a mixin, but a baseclass.
+#  I'd be happier if it were a mixin but not sure how
+#  to specify it has a fit method
+class NaiveRefitMixin:
+    def refit(
+        self,
+        problem_update: ProblemUpdate,
+        refit_data: RefitDataBase,
+    ) -> tuple[Theta, RefitDataBase]:
+        new_problem = problem_update.apply(refit_data.previous_problem)
+        return self.fit(new_problem)
+
+
+# @dataclass
+# class QuadraticRefitData:
+#     previous_problem: StratifiedLinearRegressionProblem
+#     quadratic: ExplicitQuadraticFunction
+#     previous_solutions: list[Array]
+#
+
 # todo: wrong location
 @dataclass
-class QuadraticProblemFitter(Fitter[Q]):
+class QuadraticProblemFitter(Fitter[Q, RefitDataBase], NaiveRefitMixin):
     solver: PSDSystemSolver
 
     def fit(self, problem: StratifiedLinearRegressionProblem[Q]) -> Theta:
@@ -42,10 +107,11 @@ class QuadraticProblemFitter(Fitter[Q]):
             ),
             columns=problem.regression_features,
         )
-        return Theta(df=theta_df)
+        return Theta(df=theta_df), None
 
     def _build_quadratic(
-        self, problem: StratifiedLinearRegressionProblem[Q]
+        self,
+        problem: StratifiedLinearRegressionProblem[Q],
     ) -> ExplicitQuadraticFunction:
         k, m = problem.theta_flat_shape()
         cost_components = []

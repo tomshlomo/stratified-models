@@ -5,7 +5,12 @@ import pandas as pd
 from cvxpy.expressions.variable import Variable
 from cvxpy.problems.problem import Minimize, Problem  # type: ignore
 
-from stratified_models.fitters.fitter import Fitter, Theta
+from stratified_models.fitters.fitter import (
+    Fitter,
+    NaiveRefitMixin,
+    RefitDataBase,
+    Theta,
+)
 from stratified_models.problem import StratifiedLinearRegressionProblem
 from stratified_models.scalar_function import Array, ScalarFunction
 
@@ -18,7 +23,7 @@ class CVXPYScalarFunction(ScalarFunction[Array], Protocol):
         raise NotImplementedError
 
 
-class CVXPYFitter(Fitter[CVXPYScalarFunction]):
+class CVXPYFitter(Fitter[CVXPYScalarFunction, RefitDataBase], NaiveRefitMixin):
     def fit(
         self, problem: StratifiedLinearRegressionProblem[CVXPYScalarFunction]
     ) -> Theta:
@@ -32,7 +37,7 @@ class CVXPYFitter(Fitter[CVXPYScalarFunction]):
             ),
             columns=problem.regression_features,
         )
-        return Theta(df=theta_df)
+        return Theta(df=theta_df), None
 
     def _build_cvxpy_problem(
         self,
