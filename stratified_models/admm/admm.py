@@ -30,12 +30,17 @@ class ADMMState:
     x: Array
     u: Array
     z: Array
-    t: float
+    t: Array
     primal_residual_norm: float
     dual_residual_norm: float
+    primal_residual_norms: list[float] = None
+
+    @property
+    def rho(self) -> Array:
+        return 1 / self.t
 
     def y(self) -> Array:
-        return self.u / self.t
+        return np.einsum("i...,i->i...", self.u, self.rho)
 
     def total_norm(self) -> float:
         return math.sqrt(self.dual_residual_norm**2 + self.primal_residual_norm**2)
@@ -65,9 +70,14 @@ class ConsensusADMMSolver:
         )
         costs = [[problem.cost(x) for x in state.x] + [problem.cost(state.z)]]
         start = time.time()
+        residuals = []
         for i in range(self.max_iterations):
             state = self.step(problem, state)
             costs.append([problem.cost(x) for x in state.x] + [problem.cost(state.z)])
+            residuals.append(
+                state.primal_residual_norms
+                + [state.primal_residual_norm, state.dual_residual_norm]
+            )
             print(f"{i} {time.time() - start:.2f} {min(costs[-1])}")
             if self._stop(state=state, problem=problem):
                 break
@@ -80,25 +90,30 @@ class ConsensusADMMSolver:
     ) -> ADMMState:
         # t update
         t, u = self._t_update(problem=problem, state=state)
+        rho = 1 / t
+        total_rho = float(np.sum(rho))
+        w = rho / total_rho
 
         # x update
         new_x = np.array(
             [
-                f.prox(state.z - u, t * gamma)
-                for (f, gamma), x, u in zip(problem.f, state.x, u)
+                f.prox(state.z - uu, tt * gamma)
+                for (f, gamma), x, uu, tt in zip(problem.f, state.x, u, t)
             ]
         )
 
         # z update
-        u_bar = np.mean(u, axis=0)
-        new_x_bar = np.mean(new_x, axis=0)
-        new_z = problem.g.prox(new_x_bar + u_bar, t / problem.n)
+        u_bar = np.einsum("i,i...->...", w, u)
+        new_x_bar = np.einsum("i,i...->...", w, new_x)
+        new_z = problem.g.prox(new_x_bar + u_bar, 1 / total_rho)
 
         # u update
         primal_residual = new_x - new_z
         new_u = u + primal_residual
 
-        dual_residual_norm = norm(state.z - new_z) * math.sqrt(problem.n) / t
+        dual_residual_norm = norm(state.z - new_z) * np.sqrt(
+            np.sum(rho**2)
+        )  # todo: use norm squared
 
         # todo: t update
         return ADMMState(
@@ -108,6 +123,7 @@ class ConsensusADMMSolver:
             t=t,
             dual_residual_norm=dual_residual_norm,
             primal_residual_norm=norm(primal_residual),
+            primal_residual_norms=[norm(r) for r in primal_residual],
         )
 
     def _stop(self, state: ADMMState, problem: ConsensusProblem) -> bool:
@@ -121,8 +137,10 @@ class ConsensusADMMSolver:
         eps_abs = math.sqrt(state.x.size) * self.eps_abs
 
         # dual residual norm
-        # norm(y) = norm(u*rho)=norm(u/t) = norm(u) / sqrt(t)
-        eps_rel_dual = self.eps_rel * norm(state.u) / math.sqrt(state.t)
+        eps_rel_dual = self.eps_rel * norm(
+            state.y()
+        )  # todo: not efficient  - divide after norm, not before
+        # eps_rel_dual = self.eps_rel * norm(state.u) / math.sqrt(state.t)
         eps_dual = eps_abs + eps_rel_dual
         if state.dual_residual_norm > eps_dual:
             return False
@@ -139,11 +157,11 @@ class ConsensusADMMSolver:
 
     def _t_update(
         self, state: ADMMState, problem: ConsensusProblem
-    ) -> tuple[float, Array]:
-        if state.primal_residual_norm >= self.mu * state.dual_residual_norm:
-            return state.t * self.tau_decr, state.u * self.tau_decr
-        if state.dual_residual_norm >= self.mu * state.primal_residual_norm:
-            return state.t * self.tau_incr, state.u * self.tau_incr
+    ) -> tuple[Array, Array]:
+        # if state.primal_residual_norm >= self.mu * state.dual_residual_norm:
+        #     return state.t * self.tau_decr, state.u * self.tau_decr
+        # if state.dual_residual_norm >= self.mu * state.primal_residual_norm:
+        #     return state.t * self.tau_incr, state.u * self.tau_incr
         return state.t, state.u
 
     def _get_init_state(
@@ -170,6 +188,10 @@ class ConsensusADMMSolver:
         if not initial_state_candidates:
             return zero_state
         initial_state_candidates.append(zero_state)
+        if initial_state_candidates:
+            return min(
+                initial_state_candidates, key=lambda state: problem.cost(state.z)
+            )
         state = min(initial_state_candidates, key=lambda state: problem.cost(state.z))
         # state = zero_state
         z = state.z
@@ -177,7 +199,7 @@ class ConsensusADMMSolver:
         for u in [
             # np.array([-f.grad(z) * gamma * state.t for f, gamma in problem.f]),
             np.zeros(state.u.shape),
-            state.u,
+            # state.u,
         ]:
             new_state = ADMMState(
                 x=np.concatenate([[z]] * problem.n),
@@ -216,7 +238,8 @@ class ConsensusADMMSolver:
             x=np.zeros((problem.n, *problem.var_shape)),
             z=np.zeros(problem.var_shape),
             u=np.zeros((problem.n, *problem.var_shape)),
-            t=1.0,
+            t=np.ones(problem.n),
+            # t=1000.0,
             dual_residual_norm=np.nan,
             primal_residual_norm=np.nan,
         )
