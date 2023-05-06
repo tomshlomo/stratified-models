@@ -181,7 +181,7 @@ class SumOfSquaresLoss(QuadraticScalarFunction[Array], ProxableScalarFunction[Ar
         self,
         x: cp.Expression,  # type: ignore[name-defined]
     ) -> cp.Expression:  # type: ignore[name-defined]
-        return cp.sum_squares(self.a @ x - self.b)  # type: ignore[attr-defined]
+        return cp.sum_squares(self.a @ x - self.b) / 2  # type: ignore[attr-defined]
 
     def to_explicit_quadratic(self) -> ExplicitQuadraticFunction:
         """

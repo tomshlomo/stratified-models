@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from dataclasses import dataclass
 from typing import Generic, Hashable, Iterable, TypeVar
 
@@ -70,3 +72,22 @@ class StratifiedLinearRegressionProblem(Generic[F]):
             graph.get_node_index(sub_node)
             for (graph, _), sub_node in zip(self.graphs, node)
         )
+
+    def cost(self, theta: Theta) -> float:
+        cost = 0.0
+        for loss, node in self.loss_iter():
+            cost += loss(theta.df.loc[node].values)
+        for reg, gamma in self.regularizers:
+            cost += gamma * reg(theta.df.values)
+        for lap, gamma in self.laplacians():
+            cost += gamma * lap(theta.as_array())
+        return cost
+
+
+@dataclass
+class Theta:
+    df: pd.DataFrame
+    shape: tuple[int, ...]
+
+    def as_array(self):
+        return self.df.values.reshape(self.shape)

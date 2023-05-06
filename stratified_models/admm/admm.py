@@ -34,6 +34,7 @@ class ADMMState:
     primal_residual_norm: float
     dual_residual_norm: float
     primal_residual_norms: list[float] = None
+    dual_residual_norms: Array = None
 
     @property
     def rho(self) -> Array:
@@ -53,11 +54,13 @@ def norm(x: Array) -> float:
 @dataclass
 class ConsensusADMMSolver:
     max_iterations: int = 1000
-    eps_abs: float = 1e-9
-    eps_rel: float = 1e-9
+    eps_abs: float = 1e-6
+    eps_rel: float = 1e-4
     mu: float = 10.0
     tau_incr: float = 2.0
     tau_decr: float = 1 / 2
+    k: int = 20
+    tau: float = 5
 
     def solve(
         self,
@@ -69,8 +72,10 @@ class ConsensusADMMSolver:
             initial_state_candidates=initial_state_candidates, problem=problem
         )
         costs = [[problem.cost(x) for x in state.x] + [problem.cost(state.z)]]
+        costs_vec = np.empty(self.max_iterations)
         start = time.time()
         residuals = []
+        states = []  # todo: remove
         for i in range(self.max_iterations):
             state = self.step(problem, state)
             costs.append([problem.cost(x) for x in state.x] + [problem.cost(state.z)])
@@ -78,8 +83,15 @@ class ConsensusADMMSolver:
                 state.primal_residual_norms
                 + [state.primal_residual_norm, state.dual_residual_norm]
             )
+            costs_vec[i] = costs[-1][-1]
+            states.append(state)
             print(f"{i} {time.time() - start:.2f} {min(costs[-1])}")
-            if self._stop(state=state, problem=problem):
+            if self._stop(
+                state=state,
+                problem=problem,
+                costs=costs_vec,
+                i=i,
+            ):
                 break
         return state.z, costs[-1][-1], state
 
@@ -98,7 +110,9 @@ class ConsensusADMMSolver:
         new_x = np.array(
             [
                 f.prox(state.z - uu, tt * gamma)
-                for (f, gamma), x, uu, tt in zip(problem.f, state.x, u, t)
+                for (f, gamma), uu, tt in zip(
+                    problem.f, u, t
+                )  # todo: we don't need x in the state or this iteration
             ]
         )
 
@@ -111,6 +125,7 @@ class ConsensusADMMSolver:
         primal_residual = new_x - new_z
         new_u = u + primal_residual
 
+        dual_residual_norms = norm(state.z - new_z) * rho
         dual_residual_norm = norm(state.z - new_z) * np.sqrt(
             np.sum(rho**2)
         )  # todo: use norm squared
@@ -124,9 +139,12 @@ class ConsensusADMMSolver:
             dual_residual_norm=dual_residual_norm,
             primal_residual_norm=norm(primal_residual),
             primal_residual_norms=[norm(r) for r in primal_residual],
+            dual_residual_norms=dual_residual_norms,
         )
 
-    def _stop(self, state: ADMMState, problem: ConsensusProblem) -> bool:
+    def _stop(
+        self, state: ADMMState, problem: ConsensusProblem, costs: Array, i: int
+    ) -> bool:
         # n is the size of each x
         # m is the size of z
         # p is the size of c
@@ -153,16 +171,87 @@ class ConsensusADMMSolver:
             ]
         )
         eps_primal = eps_abs + eps_rel_primal
-        return state.primal_residual_norm <= eps_primal
+        if state.primal_residual_norm > eps_primal:
+            return False
+
+        # todo: this one can be imroved. it seems that in practice we have:
+        # cost_i = p + a*exp(-bi)
+        # which means that:
+        # log(cost_i - cost_i-1) = log(p + a*exp(-bi) - p - a*exp(-b(i-1)))
+        # log(a*exp(-bi)(1 - exp(b))
+        # -b*i + log(a(1-exp(b)))
+        # we can estimate a and b using least squares of the last K iterations.
+        # once we have b, we can ask: for which i we have cost_i - a <= eps?
+        # a * exp(-bi) <= eps
+        # log(a) - b*i <= log(eps)
+        # i >= (log(a) - log(eps)) / b
+        # if the resulting i is larger than the current i, we terminate.
+        #
+        # another option is to look at the sum:
+        # sum(cost[j] - cost[j+1] j=i...) = cost[i] - p*
+        # where p* is the optimal value.
+        # let:
+        # x[i] = log(cost[i] - cost[i-1])
+        # and assume we have a and b such that:
+        # x[i] = a + b*i
+        # then:
+        # p* = cost[i] - sum(exp(x[j]) for j=i..)
+        #    = cost[i] - sum(exp(a + b*j) for j=i..)
+        #    = cost[i] - exp(a + bi) / (1 - exp(b))
+        #
+        p = self._estimate_optimal_value(costs[: (i + 1)])
+        if p is None:
+            return False
+        return costs[i] - p <= self.eps_rel * p
+
+    def _estimate_optimal_value(self, costs: Array) -> Optional[float]:
+        # todo: improve speed:
+        # rank1 updates to least squares?
+        # cache log of diffs in in the state itself.
+        if costs.size <= self.k:
+            return None
+        y = np.log(-np.diff(costs[-(self.k + 1) :]))
+        mask = np.isnan(y)
+        y[mask] = 0.0
+        x = np.arange(-self.k + 1, 1)
+        w = 2.0 ** (x / self.tau)
+        w[mask] = 0.0
+        # todo: use cov=True, and estimate a lower bound on p
+        #  using the covariance + delta method? might be an overkill
+        z = np.polyfit(x=x, y=y, deg=1, w=w)
+        b, a = z
+        # if b <= 0:
+        #     return None
+        delta = np.exp(a) / (1 - np.exp(b))
+        p = costs[-1] - delta
+        # if p > np.min(costs):
+        #     return None
+        return p
 
     def _t_update(
         self, state: ADMMState, problem: ConsensusProblem
     ) -> tuple[Array, Array]:
-        # if state.primal_residual_norm >= self.mu * state.dual_residual_norm:
-        #     return state.t * self.tau_decr, state.u * self.tau_decr
-        # if state.dual_residual_norm >= self.mu * state.primal_residual_norm:
-        #     return state.t * self.tau_incr, state.u * self.tau_incr
-        return state.t, state.u
+        if state.primal_residual_norms is None or state.dual_residual_norms is None:
+            return state.t, state.u
+        factors = []
+        for primal_residual_norm, dual_residual_norm in zip(
+            state.primal_residual_norms,
+            state.dual_residual_norms,
+        ):
+            if primal_residual_norm >= self.mu * dual_residual_norm:
+                factor = self.tau_decr
+                # yield t * self.tau_decr, u * self.tau_decr
+            elif dual_residual_norm >= self.mu * primal_residual_norm:
+                factor = self.tau_incr
+                # yield t * self.tau_incr, u * self.tau_incr
+            else:
+                factor = 1.0
+                # yield t, u
+            factors.append(factor)
+        factors = np.array(factors)
+        t = state.t * factors
+        u = np.einsum("i...,i->i...", state.u, factors)
+        return t, u
 
     def _get_init_state(
         self,

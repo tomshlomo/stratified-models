@@ -8,8 +8,8 @@ import pandas as pd
 import scipy
 
 from stratified_models.admm.admm import ADMMState, ConsensusADMMSolver, ConsensusProblem
-from stratified_models.fitters.fitter import Fitter, ProblemUpdate, RefitDataBase, Theta
-from stratified_models.problem import StratifiedLinearRegressionProblem
+from stratified_models.fitters.fitter import Fitter, ProblemUpdate, RefitDataBase
+from stratified_models.problem import StratifiedLinearRegressionProblem, Theta
 from stratified_models.scalar_function import Array, ProxableScalarFunction, Zero
 
 """
@@ -116,7 +116,7 @@ class ADMMFitter(Fitter[ProxableScalarFunction[Array], ADMMRefitData]):
         self,
         problem_update: ProblemUpdate,
         refit_data: ADMMRefitData,
-    ) -> tuple[Theta, ADMMRefitData]:
+    ) -> tuple[Theta, ADMMRefitData, float]:
         admm_problem = self._build_admm_problem_from_previous(
             problem_update=problem_update,
             refit_data=refit_data,
@@ -133,7 +133,11 @@ class ADMMFitter(Fitter[ProxableScalarFunction[Array], ADMMRefitData]):
             refit_data_in=refit_data,
             final_admm_state=final_admm_state,
         )
-        return Theta(df=theta_df), refit_data_out
+        return (
+            Theta(df=theta_df, shape=refit_data.previous_problem.theta_shape()),
+            refit_data_out,
+            cost,
+        )
 
     def _update_refit_data(
         self,
@@ -152,7 +156,7 @@ class ADMMFitter(Fitter[ProxableScalarFunction[Array], ADMMRefitData]):
     def fit(
         self,
         problem: StratifiedLinearRegressionProblem[ProxableScalarFunction[Array]],
-    ) -> tuple[Theta, ADMMRefitData]:
+    ) -> tuple[Theta, ADMMRefitData, float]:
         admm_problem = self._build_admm_problem_from_scratch(problem)
         theta, cost, final_admm_state = self.solver.solve(
             problem=admm_problem,
@@ -163,7 +167,7 @@ class ADMMFitter(Fitter[ProxableScalarFunction[Array], ADMMRefitData]):
             previous_admm_problem=admm_problem,
             previous_problem=problem,
         )
-        return Theta(df=theta_df), refit_data
+        return Theta(df=theta_df, shape=problem.theta_shape()), refit_data, cost
 
     @staticmethod
     def _build_admm_problem_from_previous(

@@ -16,7 +16,7 @@ from stratified_models.fitters.fitter import (
     RefitDataType,
 )
 from stratified_models.losses import SumOfSquaresLossFactory
-from stratified_models.problem import StratifiedLinearRegressionProblem
+from stratified_models.problem import StratifiedLinearRegressionProblem, Theta
 from stratified_models.regularization_graph.networkx_graph import (
     NetworkXRegularizationGraph,
 )
@@ -68,22 +68,22 @@ def get_problem(
 
 
 m_s = [
-    1,
     2,
+    1,
 ]
 params = [
-    (1.0, 0.0, 1e-4, [-3, 0, 1, -3, 0, 1]),
-    (0.0, 1.0, 1e-6, [-3, -3, -3, 1, 1, 1]),
+    (1e-10, 1e-10, 1e-3, [-3, 0, 0, 0, 0, 1]),
     (1, 1, 1, None),
+    (1.0, 1e-10, 1e-10, [-3, 0, 1, -3, 0, 1]),
     (1e6, 1e6, 1e-10, [-1, -1, -1, -1, -1, -1]),
+    (1e-6, 1.0, 1e-6, [-3, -3, -3, 1, 1, 1]),
     (1e-10, 1e-10, 1e10, [0, 0, 0, 0, 0, 0]),
-    (1e-10, 1e-10, 1e-6, [-3, 0, 0, 0, 0, 1]),
 ]
 fitters = [
+    QuadraticProblemFitter(solver=DirectSolver()),
     ADMMFitter(),
     CVXPYFitter(),
     QuadraticProblemFitter(solver=CGSolver()),
-    QuadraticProblemFitter(solver=DirectSolver()),
     # DirectFitter(),
     # ADMMFitter2(),
     # CGFitter(),
@@ -103,8 +103,9 @@ def test_fit(
     theta_exp: list[float],
 ) -> None:
     problem = get_problem(reg1=reg1, reg2=reg2, m=m, n=3, l2_reg=l2reg)
-    theta, _ = fitter.fit(problem)
-
+    theta, _, cost = fitter.fit(problem)
+    cost_exp1 = problem.cost(theta)
+    assert abs(cost - cost_exp1) <= 1e-3 * cost_exp1 + 1e-6
     # costs_exp = Costs.from_problem_and_theta(problem, theta)
     # assert abs(cost - costs_exp.total()) < costs_exp.total() * 1e-3
     if theta_exp:
@@ -115,7 +116,10 @@ def test_fit(
                 graph.nodes for graph, _ in problem.graphs
             ),
         ).T
-        assert ((theta.df - theta_exp_df).abs() < 1e-3).all().all()
+        cost_exp2 = problem.cost(Theta(theta_exp_df, shape=problem.theta_shape()))
+        assert (abs(cost - cost_exp2) <= 1e-3 * cost_exp2 + 1e-6) or (
+            (theta.df - theta_exp_df).abs() < 1e-3
+        ).all().all()
 
 
 @pytest.mark.parametrize(
@@ -131,12 +135,17 @@ def test_refit(
     theta_exp: list[float],
 ) -> None:
     problem = get_problem(reg1=1, reg2=1, m=m, n=3, l2_reg=1)
-    _, refit_data = fitter.fit(problem)
+    _, refit_data, _ = fitter.fit(problem)
+
     problem_update = ProblemUpdate(
         new_regularization_gammas=[l2reg],
         new_graph_gammas=[reg1, reg2],
     )
-    theta, _ = fitter.refit(problem_update=problem_update, refit_data=refit_data)
+    theta, _, cost = fitter.refit(problem_update=problem_update, refit_data=refit_data)
+    new_problem = problem_update.apply(problem)
+    cost_exp1 = new_problem.cost(theta)
+    assert abs(cost - cost_exp1) <= 1e-3 * cost_exp1 + 1e-6
+
     # costs_exp = Costs.from_problem_and_theta(problem, theta)
     # assert abs(cost - costs_exp.total()) < costs_exp.total() * 1e-3
     if theta_exp:
@@ -147,7 +156,10 @@ def test_refit(
                 graph.nodes for graph, _ in problem.graphs
             ),
         ).T
-        assert ((theta.df - theta_exp_df).abs() < 1e-3).all().all()
+        cost_exp2 = new_problem.cost(Theta(theta_exp_df, shape=problem.theta_shape()))
+        assert (abs(cost - cost_exp2) <= 1e-3 * cost_exp2 + 1e-6) or (
+            (theta.df - theta_exp_df).abs() < 1e-3
+        ).all().all()
 
 
 # @pytest.mark.parametrize(

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import itertools
 from abc import abstractmethod
 from dataclasses import dataclass
 from typing import Optional, Protocol, TypeVar
@@ -7,14 +8,9 @@ from typing import Optional, Protocol, TypeVar
 import pandas as pd
 import scipy
 
-from stratified_models.problem import F, StratifiedLinearRegressionProblem
+from stratified_models.problem import F, StratifiedLinearRegressionProblem, Theta
 from stratified_models.quadratic import ExplicitQuadraticFunction
 from stratified_models.scalar_function import Array, QuadraticScalarFunction
-
-
-@dataclass
-class Theta:
-    df: pd.DataFrame
 
 
 @dataclass
@@ -57,14 +53,14 @@ class Fitter(Protocol[F, RefitDataType]):
     def fit(
         self,
         problem: StratifiedLinearRegressionProblem[F],
-    ) -> tuple[Theta, RefitDataType]:
+    ) -> tuple[Theta, RefitDataType, float]:
         raise NotImplementedError
 
     def refit(
         self,
         problem_update: ProblemUpdate,
         refit_data: RefitDataType,
-    ) -> tuple[Theta, RefitDataType]:
+    ) -> tuple[Theta, RefitDataType, float]:
         raise NotImplementedError
 
 
@@ -90,15 +86,24 @@ class NaiveRefitMixin:
 #     quadratic: ExplicitQuadraticFunction
 #     previous_solutions: list[Array]
 #
+@dataclass
+class QuadraticRefitData(RefitDataBase):
+    previous_quadratic_components: list[ExplicitQuadraticFunction, float]
+
 
 # todo: wrong location
+# todo: impl refit, return cost and refit data
 @dataclass
 class QuadraticProblemFitter(Fitter[Q, RefitDataBase], NaiveRefitMixin):
     solver: PSDSystemSolver
 
-    def fit(self, problem: StratifiedLinearRegressionProblem[Q]) -> Theta:
-        f = self._build_quadratic(problem)
-        theta = self.solver.solve(f, problem)
+    def fit(
+        self,
+        problem: StratifiedLinearRegressionProblem[Q],
+    ) -> tuple[Theta, RefitDataType, float,]:
+        f, components = self._build_quadratic(problem)
+        theta = self.solver.solve(f)
+        cost = f(theta)
         theta = theta.reshape((-1, problem.m))
         theta_df = pd.DataFrame(  # todo: should be a common function
             theta,
@@ -107,12 +112,44 @@ class QuadraticProblemFitter(Fitter[Q, RefitDataBase], NaiveRefitMixin):
             ),
             columns=problem.regression_features,
         )
-        return Theta(df=theta_df), None
+        refit_data = QuadraticRefitData(
+            previous_problem=problem,
+            previous_quadratic_components=components,
+        )
+        return Theta(df=theta_df, shape=problem.theta_shape()), refit_data, cost
+
+    def refit(
+        self,
+        problem_update: ProblemUpdate,
+        refit_data: QuadraticRefitData,
+    ) -> tuple[Theta, QuadraticRefitData, float]:
+        problem = problem_update.apply(refit_data.previous_problem)
+        f, components = self._build_quadratic_from_previous(
+            problem_update=problem_update,
+            refit_data=refit_data,
+        )
+        # todo: pass previous solutions (or even factorizations to use preconditioners)
+        #  to PSDSolver. implement a resolve in PSDSolver.
+        theta = self.solver.solve(f)
+        cost = f(theta)
+        theta = theta.reshape((-1, problem.m))
+        theta_df = pd.DataFrame(  # todo: should be a common function
+            theta,
+            index=pd.MultiIndex.from_product(
+                graph.nodes for graph, _ in problem.graphs
+            ),
+            columns=problem.regression_features,
+        )
+        refit_data = QuadraticRefitData(
+            previous_problem=problem,
+            previous_quadratic_components=refit_data,
+        )
+        return Theta(df=theta_df, shape=problem.theta_shape()), refit_data, cost
 
     def _build_quadratic(
         self,
         problem: StratifiedLinearRegressionProblem[Q],
-    ) -> ExplicitQuadraticFunction:
+    ) -> tuple[ExplicitQuadraticFunction, list[ExplicitQuadraticFunction, float]]:
         k, m = problem.theta_flat_shape()
         cost_components = []
 
@@ -143,10 +180,32 @@ class QuadraticProblemFitter(Fitter[Q, RefitDataBase], NaiveRefitMixin):
             for laplacian, gamma in problem.laplacians()
         )
 
-        return ExplicitQuadraticFunction.sum(
-            m=k * m,
-            components=cost_components,
+        return (
+            ExplicitQuadraticFunction.sum(
+                m=k * m,
+                components=cost_components,
+            ),
+            cost_components,
         )
+
+    def _build_quadratic_from_previous(
+        self,
+        problem_update: ProblemUpdate,
+        refit_data: QuadraticRefitData,
+    ) -> tuple[ExplicitQuadraticFunction, list[ExplicitQuadraticFunction, float],]:
+        components = [
+            (cost_component, new_gamma)
+            for new_gamma, (cost_component, _) in zip(
+                itertools.chain(
+                    [1.0],
+                    problem_update.new_regularization_gammas,
+                    problem_update.new_graph_gammas,
+                ),
+                refit_data.previous_quadratic_components,
+            )
+        ]
+        k, m = refit_data.previous_problem.theta_flat_shape()
+        return ExplicitQuadraticFunction.sum(k * m, components=components), components
 
 
 # todo: wrong location
@@ -155,7 +214,6 @@ class PSDSystemSolver:
     def solve(
         self,
         f: ExplicitQuadraticFunction,
-        problem: StratifiedLinearRegressionProblem[Q],
     ) -> Array:
         pass
 
@@ -165,7 +223,6 @@ class DirectSolver(PSDSystemSolver):
     def solve(
         self,
         f: ExplicitQuadraticFunction,
-        problem: StratifiedLinearRegressionProblem[Q],
     ) -> Array:
         a = f.q.as_sparse_matrix()
         return scipy.sparse.linalg.spsolve(a, -f.c)  # type: ignore[no-any-return]
@@ -179,7 +236,6 @@ class CGSolver(PSDSystemSolver):
     def solve(
         self,
         f: ExplicitQuadraticFunction,
-        problem: StratifiedLinearRegressionProblem[Q],
     ) -> Array:
         theta, info = scipy.sparse.linalg.cg(
             f.q.to_scipy_linear_operator(),

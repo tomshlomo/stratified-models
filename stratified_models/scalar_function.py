@@ -77,7 +77,7 @@ class SumOfSquares(ProxableScalarFunction[Array], QuadraticScalarFunction[Array]
         self,
         x: cp.Expression,  # type: ignore[name-defined]
     ) -> cp.Expression:  # type: ignore[name-defined]
-        return cp.sum_squares(x)  # type: ignore[attr-defined]
+        return cp.sum_squares(x) / 2  # type: ignore[attr-defined]
 
     def to_explicit_quadratic(self) -> ExplicitQuadraticFunction:
         m = int(np.prod(self.shape))
@@ -278,4 +278,5 @@ class TensorQuadForm(QuadraticScalarFunction[Array], ProxableScalarFunction[Arra
         x: cp.Expression,  # type: ignore[name-defined]
     ) -> cp.Expression:  # type: ignore[name-defined]
         q = self.to_explicit_quadratic().q.as_sparse_matrix()
-        return cp.quad_form(x, q, assume_PSD=True) / 2  # type: ignore[attr-defined]
+        expression = cp.quad_form(x.flatten(order="C"), q, assume_PSD=True)
+        return expression / 2  # type: ignore[attr-defined]

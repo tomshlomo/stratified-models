@@ -30,12 +30,16 @@ from stratified_models.linear_operator import (
 
 @dataclass
 class ExplicitQuadraticFunction:
+    """
+    x * (q * x) / 2 + (c * x) + d
+    """
+
     q: LinearOperator
     c: Array
     d: float
 
     def __call__(self, x: Array) -> float:
-        return float((x @ (self.q.matvec(x))) / 2 + x @ self.c + self.d / 2)
+        return float((x @ (self.q.matvec(x))) / 2 + x @ self.c + self.d)
 
     @classmethod
     def quadratic_form(cls, q: LinearOperator) -> ExplicitQuadraticFunction:
