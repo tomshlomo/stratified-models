@@ -16,5 +16,5 @@ def test_explicit_quadratic() -> None:
         c=c,
         d=d,
     )
-    assert f(np.zeros(m)) == d / 2
-    assert f(np.ones(m)) == a.sum() / 2 + c.sum() + d / 2
+    assert f(np.zeros(m)) == d
+    assert f(np.ones(m)) == a.sum() / 2 + c.sum() + d

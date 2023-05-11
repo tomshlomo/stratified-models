@@ -44,6 +44,8 @@ class StratifiedLinearRegressionProblem(Generic[F]):
         for node, x_slice in self.x.groupby(self.stratification_features)[
             self.regression_features
         ]:
+            if not isinstance(node, tuple):
+                node = (node,)
             yield node, x_slice, self.y.loc[x_slice.index]
 
     def laplacians(self) -> Iterable[tuple[F, float]]:
@@ -89,5 +91,28 @@ class Theta:
     df: pd.DataFrame
     shape: tuple[int, ...]
 
-    def as_array(self):
-        return self.df.values.reshape(self.shape)
+    def as_array(self) -> Array:
+        return self.df.values.reshape(self.shape)  # type:ignore[no-any-return]
+
+    @classmethod
+    def _get_df_from_array(
+        cls,
+        arr: Array,
+        problem: StratifiedLinearRegressionProblem[F],
+    ) -> pd.DataFrame:
+        return pd.DataFrame(
+            arr.reshape(problem.theta_flat_shape()),
+            index=pd.MultiIndex.from_product(
+                graph.nodes for graph, _ in problem.graphs
+            ),
+            columns=problem.regression_features,
+        )
+
+    @classmethod
+    def from_array(
+        cls,
+        arr: Array,
+        problem: StratifiedLinearRegressionProblem[F],
+    ) -> Theta:
+        df = cls._get_df_from_array(arr=arr, problem=problem)
+        return Theta(df=df, shape=problem.theta_shape())

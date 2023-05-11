@@ -36,9 +36,6 @@ class ProxableScalarFunction(ScalarFunction[X], Protocol):
     def prox(self, v: X, t: float) -> X:
         raise NotImplementedError
 
-    def grad(self, x: X) -> X:
-        raise NotImplementedError
-
 
 @dataclass
 class Zero(Generic[X], ProxableScalarFunction[X]):
@@ -69,9 +66,6 @@ class SumOfSquares(ProxableScalarFunction[Array], QuadraticScalarFunction[Array]
         x = v/(1+t)
         """
         return v / (1 + t)
-
-    def grad(self, x: Array) -> Array:
-        return x
 
     def cvxpy_expression(
         self,
@@ -172,9 +166,9 @@ class TensorQuadForm(QuadraticScalarFunction[Array], ProxableScalarFunction[Arra
     _call_cache: Optional[_TensorQuadFormCallCache] = None
     _prox_cache: Optional[_TensorQuadFormProxCache] = None
 
-    def _set_call_einsum_args_cache(self) -> None:
+    def _set_call_einsum_args_cache(self) -> _TensorQuadFormCallCache:
         if self._call_cache:
-            return
+            return self._call_cache
         all_letters = string.ascii_letters
         summation_index1 = all_letters[-1]
         summation_index2 = all_letters[self.axis]
@@ -188,10 +182,11 @@ class TensorQuadForm(QuadraticScalarFunction[Array], ProxableScalarFunction[Arra
         self._call_cache = _TensorQuadFormCallCache(
             einsum_subscripts=subscripts, einsum_path=path
         )
+        return self._call_cache
 
-    def _set_prox_cache(self) -> None:
+    def _set_prox_cache(self) -> _TensorQuadFormProxCache:
         if self._prox_cache:
-            return
+            return self._prox_cache
         einsum_subscripts, einsum_path = self._prox_einsum_args()
         d, u = np.linalg.eigh(self.a)
         self._prox_cache = _TensorQuadFormProxCache(
@@ -200,6 +195,7 @@ class TensorQuadForm(QuadraticScalarFunction[Array], ProxableScalarFunction[Arra
             d=d,
             u=u,
         )
+        return self._prox_cache
 
     def _prox_einsum_args(self) -> tuple[str, EinsumPath]:
         all_letters = string.ascii_letters
@@ -222,26 +218,11 @@ class TensorQuadForm(QuadraticScalarFunction[Array], ProxableScalarFunction[Arra
         return subscripts, path
 
     def __call__(self, x: Array) -> float:
-        self._set_call_einsum_args_cache()
-        subscripts = self._call_cache.einsum_subscripts
-        path = self._call_cache.einsum_path
+        cache = self._set_call_einsum_args_cache()
+        subscripts = cache.einsum_subscripts
+        path = cache.einsum_path
         out = np.einsum(subscripts, x, self.a, x, optimize=path)
         return float(out) / 2
-
-    def grad(self, x: Array) -> Array:
-        all_letters = string.ascii_letters
-        out_index = all_letters[-1]
-        summation_index = all_letters[self.axis]
-        x_subs = all_letters[: len(self.dims)]
-        a_subs = out_index + summation_index
-        out_subs = x_subs.replace(summation_index, out_index)
-        subscripts = f"{a_subs},{x_subs}->{out_subs}"
-        out = np.einsum(
-            subscripts,
-            self.a,
-            x,
-        )
-        return out
 
     def prox(self, v: Array, t: float) -> Array:
         """
@@ -255,14 +236,21 @@ class TensorQuadForm(QuadraticScalarFunction[Array], ProxableScalarFunction[Arra
         x = uwu'v
         where w = (td + I)^-1
         """
-        self._set_prox_cache()
-        u = self._prox_cache.u
-        d = self._prox_cache.d
-        einsum_subscripts = self._prox_cache.einsum_subscripts
-        einsum_path = self._prox_cache.einsum_path
+        cache = self._set_prox_cache()
+        u = cache.u
+        d = cache.d
+        einsum_subscripts = cache.einsum_subscripts
+        einsum_path = cache.einsum_path
 
         w = 1 / (t * d + 1)
-        return np.einsum(einsum_subscripts, u, w, u, v, optimize=einsum_path)
+        return np.einsum(  # type: ignore[no-any-return]
+            einsum_subscripts,
+            u,
+            w,
+            u,
+            v,
+            optimize=einsum_path,
+        )
 
     def to_explicit_quadratic(self) -> ExplicitQuadraticFunction:
         return ExplicitQuadraticFunction.quadratic_form(
@@ -278,5 +266,9 @@ class TensorQuadForm(QuadraticScalarFunction[Array], ProxableScalarFunction[Arra
         x: cp.Expression,  # type: ignore[name-defined]
     ) -> cp.Expression:  # type: ignore[name-defined]
         q = self.to_explicit_quadratic().q.as_sparse_matrix()
-        expression = cp.quad_form(x.flatten(order="C"), q, assume_PSD=True)
-        return expression / 2  # type: ignore[attr-defined]
+        expression = cp.quad_form(  # type: ignore[attr-defined]
+            x.flatten(order="C"),
+            q,
+            assume_PSD=True,
+        )
+        return expression / 2

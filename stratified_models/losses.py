@@ -38,7 +38,9 @@ class SumOfSquaresProxCache:
 
 
 def _to_numpy_array(x: Union[Array, scipy.sparse.spmatrix]) -> Array:
-    return x.toarray() if isinstance(x, scipy.sparse.spmatrix) else x
+    return (
+        x.toarray() if isinstance(x, scipy.sparse.spmatrix) else x
+    )  # type:ignore[no-any-return]
 
 
 @dataclass
@@ -52,12 +54,9 @@ class SumOfSquaresLoss(QuadraticScalarFunction[Array], ProxableScalarFunction[Ar
         r = y - self.b
         return float((r @ r) / 2)
 
-    def grad(self, x: Array) -> Array:
-        y = self.a @ x
-        r = y - self.b
-        return self.a.T @ r
-
-    def _set_prox_cache(self) -> None:
+    def _get_prox_cache(self) -> SumOfSquaresProxCache:
+        if self._prox_cache is not None:
+            return self._prox_cache
         atb = self.a.T @ self.b
         if self.is_tall:
             d, u = np.linalg.eigh(_to_numpy_array(self.a.T @ self.a))
@@ -74,6 +73,7 @@ class SumOfSquaresLoss(QuadraticScalarFunction[Array], ProxableScalarFunction[Ar
             d=d,
             einsum_path=path,
         )
+        return self._prox_cache
 
     @property
     def is_tall(self) -> bool:
@@ -92,9 +92,9 @@ class SumOfSquaresLoss(QuadraticScalarFunction[Array], ProxableScalarFunction[Ar
         (a'a + 1/t I)^-1 = uwu'
         where w = (d + I/t)^-1
         """
-        # start = time()
-        u = self._prox_cache.u
-        d = self._prox_cache.d
+        prox_cache = self._get_prox_cache()
+        u = prox_cache.u
+        d = prox_cache.d
 
         w = 1 / (d + 1 / t)
 
@@ -104,17 +104,9 @@ class SumOfSquaresLoss(QuadraticScalarFunction[Array], ProxableScalarFunction[Ar
             w,
             u,
             rhs,
-            optimize=self._prox_cache.einsum_path,
+            optimize=prox_cache.einsum_path,
         )
-        # print(f'{time() - start:.1e}', end='\t\t')
-        # start = time()
-        # m = self.a.shape[1]
-        # q = self.a.T @ self.a + np.eye(m) / t
-        # # todo: factorization caching
-        # # todo: invert aa' instead if a'a it is faster
-        # x2 = np.linalg.solve(q, rhs)
-        # print(f'{time() - start:.1e}')
-        return x1
+        return x1  # type:ignore[no-any-return]
 
     def _prox_fat(self, rhs: Array, t: float) -> Array:
         """
@@ -136,41 +128,19 @@ class SumOfSquaresLoss(QuadraticScalarFunction[Array], ProxableScalarFunction[Ar
           = t (rhs - t a'uwu'a rhs)
         """
 
-        # start = time()
-        u = self._prox_cache.u
-        w = 1 / (1.0 + t * self._prox_cache.d)
-        x1 = np.einsum(
-            "nm,m,km,k->n", u, w, u, rhs, optimize=self._prox_cache.einsum_path
-        )
+        prox_cache = self._get_prox_cache()
+        u = prox_cache.u
+        w = 1 / (1.0 + t * prox_cache.d)
+        x1 = np.einsum("nm,m,km,k->n", u, w, u, rhs, optimize=prox_cache.einsum_path)
         x1 = rhs - t * x1
         x1 *= t
-        # print(f'{time() - start:.1e}', end='\t\t')
-        #
-        # start = time()
-        # n = self.a.shape[0]
-        # q = np.eye(n) + t * self.a @ self.a.T
-        # x = np.linalg.solve(q, self.a @ rhs)
-        # x *= t
-        # x = self.a.T @ x
-        # x = rhs - x
-        # x *= t
-        # print(f'{time() - start:.1e}', end='\t\t')
-        #
-        # start = time()
-        # m = self.a.shape[1]
-        # q = self.a.T @ self.a + np.eye(m) / t
-        # # todo: factorization caching
-        # # todo: invert aa' instead if a'a it is faster
-        # x2 = np.linalg.solve(q, rhs)
-        # print(f'{time() - start:.1e}')
-        return x1
+        return x1  # type:ignore[no-any-return]
 
     def prox(self, v: Array, t: float) -> Array:
         if t == 0:
             return v
-        if not self._prox_cache:
-            self._set_prox_cache()
-        atb = self._prox_cache.atb
+        prox_cache = self._get_prox_cache()
+        atb = prox_cache.atb
         rhs = v / t + atb
         if self.is_tall:
             return self._prox_tall(rhs=rhs, t=t)

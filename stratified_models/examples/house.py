@@ -92,22 +92,35 @@ eval_pred(y_pred_test, df_test["log_price"], "common test")
 eval_pred(y_pred_train, df_train["log_price"], "common train")
 pass
 
+graph1 = NetworkXRegularizationGraph(nx.path_graph(50), "lat_bin")
+graph2 = NetworkXRegularizationGraph(nx.path_graph(50), "long_bin")
 model = StratifiedLinearEstimator(
     loss_factory=SumOfSquaresLossFactory(),
     regularizers=[(SumOfSquares(9), 1e-4)],
     graphs=[
-        (NetworkXRegularizationGraph(nx.path_graph(50), "lat_bin"), 15),
-        (NetworkXRegularizationGraph(nx.path_graph(50), "long_bin"), 15),
+        (graph1, 15),
+        (graph2, 15),
     ],
     regression_features=regression_features,
     fitter=ADMMFitter(ConsensusADMMSolver(max_iterations=1000)),
+    warm_start=True,
 )
-model.fit(
-    X=df_train.drop(columns=["log_price"]),
-    y=df_train["log_price"],
-)
+x = df_train.drop(columns=["log_price"])
+y = df_train["log_price"]
+model.fit(X=x, y=y)
 y_pred_test = model.predict(df_test)
 y_pred_train = model.predict(df_train)
 eval_pred(y_pred_test, df_test["log_price"], "strat test")
 eval_pred(y_pred_train, df_train["log_price"], "strat train")
+model.graphs = [
+    (graph1, 150),
+    (graph2, 150),
+]
+model.fit(X=x, y=y)
+
+y_pred_test = model.predict(df_test)
+y_pred_train = model.predict(df_train)
+eval_pred(y_pred_test, df_test["log_price"], "strat2 test")
+eval_pred(y_pred_train, df_train["log_price"], "strat2 train")
+
 pass
