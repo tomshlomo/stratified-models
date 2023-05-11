@@ -38,9 +38,9 @@ class SumOfSquaresProxCache:
 
 
 def _to_numpy_array(x: Union[Array, scipy.sparse.spmatrix]) -> Array:
-    return (
+    return (  # type:ignore[no-any-return]
         x.toarray() if isinstance(x, scipy.sparse.spmatrix) else x
-    )  # type:ignore[no-any-return]
+    )
 
 
 @dataclass
