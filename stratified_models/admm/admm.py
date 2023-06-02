@@ -12,7 +12,7 @@ from stratified_models.scalar_function import Array, ProxableScalarFunction
 
 @dataclass
 class ConsensusProblem:
-    f: list[tuple[ProxableScalarFunction[Array], float]]
+    f: tuple[tuple[ProxableScalarFunction[Array], float], ...]
     g: ProxableScalarFunction[Array]
     var_shape: tuple[int, ...]
     # m: int
@@ -93,7 +93,7 @@ class ConsensusADMMSolver:
         self,
         problem: ConsensusProblem,
         initial_state_candidates: Optional[list[ADMMState]] = None,
-    ) -> tuple[Array, float, ADMMState]:
+    ) -> tuple[Array, float, ADMMState, bool]:
         initial_state_candidates = initial_state_candidates or []
         state = self._get_init_state(
             initial_state_candidates=initial_state_candidates,
@@ -112,6 +112,7 @@ class ConsensusADMMSolver:
         )
         print(" ".join(["=" * 10] * 5))
         start = time.time()
+        converged = False
         for i in range(self.max_iterations):
             state_tmp = self._t_update(state=state)
             state = self._step(problem, state_tmp)
@@ -134,16 +135,16 @@ class ConsensusADMMSolver:
                 costs=costs_vec,
                 i=i,
             ):
+                converged = True
                 break
-        return best_z, best_cost, state
+        return best_z, best_cost, state, converged
 
     def _step(
         self,
         problem: ConsensusProblem,
         state: ADMMState,
     ) -> ADMMStateWithStopInfo:
-        t, u, z = state.t, state.u, state.z
-        rho = 1 / t
+        t, u, z, rho = state.t, state.u, state.z, state.rho
         total_rho = float(np.sum(rho))
         w = rho / total_rho
 

@@ -29,16 +29,16 @@ class ProblemUpdate:
             x=problem.x,
             y=problem.y,
             loss_factory=problem.loss_factory,
-            regularizers=[
+            regularizers_factories=tuple(
                 (f, gamma)
                 for (f, _), gamma in zip(
-                    problem.regularizers, self.new_regularization_gammas
+                    problem.regularizers_factories, self.new_regularization_gammas
                 )
-            ],
-            graphs=[
+            ),
+            graphs=tuple(
                 (graph, gamma)
                 for (graph, _), gamma in zip(problem.graphs, self.new_graph_gammas)
-            ],
+            ),
             regression_features=problem.regression_features,
         )
 

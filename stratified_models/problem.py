@@ -10,6 +10,7 @@ from stratified_models.losses import LossFactory
 from stratified_models.regularization_graph.regularization_graph import (
     RegularizationGraph,
 )
+from stratified_models.regularizers import RegularizationFactory
 from stratified_models.scalar_function import Array, ScalarFunction
 
 F = TypeVar("F", bound=ScalarFunction[Array])
@@ -20,8 +21,8 @@ class StratifiedLinearRegressionProblem(Generic[F]):
     x: pd.DataFrame
     y: pd.Series
     loss_factory: LossFactory[F]
-    regularizers: list[tuple[F, float]]
-    graphs: list[tuple[RegularizationGraph[F], float]]
+    regularizers_factories: tuple[tuple[RegularizationFactory[F], float], ...]
+    graphs: tuple[tuple[RegularizationGraph[F], float], ...]
     regression_features: list[str]
 
     @property
@@ -75,11 +76,16 @@ class StratifiedLinearRegressionProblem(Generic[F]):
             for (graph, _), sub_node in zip(self.graphs, node)
         )
 
+    def regularizers(self) -> Iterable[tuple[F, float]]:
+        shape = self.theta_shape()
+        for factory, gamma in self.regularizers_factories:
+            yield factory.build_regularization_function(shape), gamma
+
     def cost(self, theta: Theta) -> float:
         cost = 0.0
         for loss, node in self.loss_iter():
             cost += loss(theta.df.loc[node].values)
-        for reg, gamma in self.regularizers:
+        for reg, gamma in self.regularizers():
             cost += gamma * reg(theta.df.values)
         for lap, gamma in self.laplacians():
             cost += gamma * lap(theta.as_array())

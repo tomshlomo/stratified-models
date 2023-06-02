@@ -51,7 +51,7 @@ class ExplicitQuadraticFunction:
 
     @classmethod
     def sum(
-        cls, m: int, components: list[tuple[ExplicitQuadraticFunction, float]]
+        cls, m: int, components: tuple[tuple[ExplicitQuadraticFunction, float], ...]
     ) -> ExplicitQuadraticFunction:
         # todo: if empty return the zero quadratic
         q = []
@@ -62,7 +62,7 @@ class ExplicitQuadraticFunction:
             c += f.c * gamma
             d += f.d * gamma
         return ExplicitQuadraticFunction(
-            q=SumOfLinearOperators(q, m),
+            q=SumOfLinearOperators(tuple(q), m),
             c=c,
             d=d,
         )

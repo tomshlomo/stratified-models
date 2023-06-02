@@ -7,18 +7,23 @@ import numpy as np
 import pandas as pd
 
 from stratified_models.fitters.fitter import Fitter, ProblemUpdate, RefitDataType
-from stratified_models.losses import LossFactory
+from stratified_models.losses import LossFactory, SumOfSquaresLossFactory
 from stratified_models.problem import F, StratifiedLinearRegressionProblem, Theta
 from stratified_models.regularization_graph.regularization_graph import (
     RegularizationGraph,
 )
+from stratified_models.regularizers import (
+    RegularizationFactory,
+    SumOfSquaresRegularizerFactory,
+)
+from stratified_models.scalar_function import Array, ProxableScalarFunction
 
 
 @dataclass
 class EstimatorPreviousFitData(Generic[F, RefitDataType]):
     loss_factory: LossFactory[F]
-    regularizers: list[tuple[F, float]]
-    graphs: list[tuple[RegularizationGraph[F], float]]
+    regularizers_factories: tuple[tuple[RegularizationFactory[F], float], ...]
+    graphs: tuple[tuple[RegularizationGraph[F], float], ...]
     regression_features: list[str]
     fitter: Fitter[F, RefitDataType]
     x: pd.DataFrame
@@ -30,14 +35,16 @@ class EstimatorPreviousFitData(Generic[F, RefitDataType]):
 @dataclass
 class StratifiedLinearEstimator(Generic[F, RefitDataType]):
     loss_factory: LossFactory[F]
-    regularizers: list[tuple[F, float]]
-    graphs: list[tuple[RegularizationGraph[F], float]]
+    regularizers_factories: tuple[tuple[RegularizationFactory[F], float], ...]
+    graphs: tuple[tuple[RegularizationGraph[F], float], ...]
     regression_features: list[str]
     fitter: Fitter[F, RefitDataType]
     warm_start: bool
 
     def fit(
-        self, X: pd.DataFrame, y: pd.Series
+        self,
+        X: pd.DataFrame,
+        y: pd.Series,
     ) -> StratifiedLinearEstimator[F, RefitDataType]:
         theta, fitter_refit_data = self.attempt_refit(x=X, y=y)
         if theta is None or fitter_refit_data is None:
@@ -84,7 +91,7 @@ class StratifiedLinearEstimator(Generic[F, RefitDataType]):
     ) -> EstimatorPreviousFitData[F, RefitDataType]:
         return EstimatorPreviousFitData(
             loss_factory=self.loss_factory,
-            regularizers=self.regularizers,
+            regularizers_factories=self.regularizers_factories,
             graphs=self.graphs,
             regression_features=self.regression_features,
             fitter=self.fitter,
@@ -101,7 +108,7 @@ class StratifiedLinearEstimator(Generic[F, RefitDataType]):
             x=x,
             y=y,
             loss_factory=self.loss_factory,
-            regularizers=self.regularizers,
+            regularizers_factories=self.regularizers_factories,
             graphs=self.graphs,
             regression_features=self.regression_features,
         )
@@ -114,8 +121,8 @@ class StratifiedLinearEstimator(Generic[F, RefitDataType]):
     ) -> Optional[ProblemUpdate]:
         # check if structure changed
         if not (
-            [f for f, _ in self.regularizers]
-            == [f for f, _ in previous_fit_data.regularizers]
+            [f for f, _ in self.regularizers_factories]
+            == [f for f, _ in previous_fit_data.regularizers_factories]
             and [f for f, _ in self.graphs] == [f for f, _ in previous_fit_data.graphs]
             and self.loss_factory == previous_fit_data.loss_factory
             and self.regression_features == previous_fit_data.regression_features
@@ -136,7 +143,9 @@ class StratifiedLinearEstimator(Generic[F, RefitDataType]):
 
         return ProblemUpdate(
             new_graph_gammas=[gamma for _, gamma in self.graphs],
-            new_regularization_gammas=[gamma for _, gamma in self.regularizers],
+            new_regularization_gammas=[
+                gamma for _, gamma in self.regularizers_factories
+            ],
         )
 
     def _get_previous_fit_data(
@@ -160,3 +169,25 @@ class StratifiedLinearEstimator(Generic[F, RefitDataType]):
             theta_aligned.values,
         )
         return pd.Series(y, index=X.index)
+
+    @classmethod
+    def make_ridge(
+        cls,
+        gamma: float,
+        graphs: tuple[
+            tuple[RegularizationGraph[ProxableScalarFunction[Array]], float], ...
+        ],
+        regression_features: list[str],
+        fitter: Fitter[
+            ProxableScalarFunction[Array], RefitDataType
+        ],  # todo: AutoFitter - decide which fitter to use based on problem
+        warm_start: bool = True,
+    ) -> StratifiedLinearEstimator[ProxableScalarFunction[Array], RefitDataType]:
+        return StratifiedLinearEstimator(
+            loss_factory=SumOfSquaresLossFactory(),
+            regularizers_factories=((SumOfSquaresRegularizerFactory(), gamma),),
+            graphs=graphs,
+            regression_features=regression_features,
+            fitter=fitter,
+            warm_start=warm_start,
+        )

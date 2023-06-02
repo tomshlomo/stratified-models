@@ -18,11 +18,8 @@ from stratified_models.problem import StratifiedLinearRegressionProblem, Theta
 from stratified_models.regularization_graph.networkx_graph import (
     NetworkXRegularizationGraph,
 )
-from stratified_models.scalar_function import (
-    Array,
-    QuadraticScalarFunction,
-    SumOfSquares,
-)
+from stratified_models.regularizers import SumOfSquaresRegularizerFactory
+from stratified_models.scalar_function import Array, QuadraticScalarFunction
 
 
 def get_problem(
@@ -30,13 +27,6 @@ def get_problem(
 ) -> StratifiedLinearRegressionProblem[QuadraticScalarFunction[Array]]:
     graph1 = NetworkXRegularizationGraph(nx.path_graph(2), "strat_0")
     graph2 = NetworkXRegularizationGraph(nx.path_graph(3), "strat_1")
-    # nx.set_edge_attributes(
-    #     graph1, 1.0, NetworkXRegularizationGraph.LAPLACE_REG_PARAM_KEY
-    # )
-    # nx.set_edge_attributes(
-    #     graph2, 1.0, NetworkXRegularizationGraph.LAPLACE_REG_PARAM_KEY
-    # )
-
     x = (
         np.power.outer(np.arange(n), np.arange(m))
         if m > 1
@@ -59,8 +49,8 @@ def get_problem(
         x=df,
         y=y,
         loss_factory=SumOfSquaresLossFactory(),
-        regularizers=[(SumOfSquares(m), l2_reg)],
-        graphs=[(graph1, reg1), (graph2, reg2)],
+        regularizers_factories=((SumOfSquaresRegularizerFactory(), l2_reg),),
+        graphs=((graph1, reg1), (graph2, reg2)),
         regression_features=regression_features,
     )
 
@@ -211,8 +201,8 @@ def get_problem_single_graph(
         x=df,
         y=y,
         loss_factory=SumOfSquaresLossFactory(),
-        regularizers=[(SumOfSquares(m), l2_reg)],
-        graphs=[(graph, laplace_reg)],
+        regularizers_factories=((SumOfSquaresRegularizerFactory(), l2_reg),),
+        graphs=((graph, laplace_reg),),
         regression_features=regression_features,
     )
 

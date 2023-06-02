@@ -15,7 +15,7 @@ from stratified_models.scalar_function import Array, QuadraticScalarFunction
 
 @dataclass
 class QuadraticRefitData(RefitDataBase[QuadraticScalarFunction[Array]]):
-    previous_quadratic_components: list[tuple[ExplicitQuadraticFunction, float]]
+    previous_quadratic_components: tuple[tuple[ExplicitQuadraticFunction, float], ...]
 
 
 @dataclass
@@ -71,7 +71,7 @@ class QuadraticProblemFitter(
         self,
         problem: StratifiedLinearRegressionProblem[QuadraticScalarFunction[Array]],
     ) -> tuple[
-        ExplicitQuadraticFunction, list[tuple[ExplicitQuadraticFunction, float]]
+        ExplicitQuadraticFunction, tuple[tuple[ExplicitQuadraticFunction, float], ...]
     ]:
         k, m = problem.theta_flat_shape()
         cost_components = []
@@ -94,7 +94,7 @@ class QuadraticProblemFitter(
         # local reg
         cost_components.extend(
             (reg.to_explicit_quadratic().repeat(k), gamma)
-            for reg, gamma in problem.regularizers
+            for reg, gamma in problem.regularizers()
         )
 
         # laplacian reg
@@ -102,13 +102,13 @@ class QuadraticProblemFitter(
             (laplacian.to_explicit_quadratic(), gamma)
             for laplacian, gamma in problem.laplacians()
         )
-
+        cost_components_tuple = tuple(cost_components)
         return (
             ExplicitQuadraticFunction.sum(
                 m=k * m,
-                components=cost_components,
+                components=cost_components_tuple,
             ),
-            cost_components,
+            cost_components_tuple,
         )
 
     def _build_quadratic_from_previous(
@@ -117,9 +117,9 @@ class QuadraticProblemFitter(
         refit_data: QuadraticRefitData,
     ) -> tuple[
         ExplicitQuadraticFunction,
-        list[tuple[ExplicitQuadraticFunction, float]],
+        tuple[tuple[ExplicitQuadraticFunction, float], ...],
     ]:
-        components = [
+        components = tuple(
             (cost_component, new_gamma)
             for new_gamma, (cost_component, _) in zip(
                 itertools.chain(
@@ -129,7 +129,7 @@ class QuadraticProblemFitter(
                 ),
                 refit_data.previous_quadratic_components,
             )
-        ]
+        )
         k, m = refit_data.previous_problem.theta_flat_shape()
         return ExplicitQuadraticFunction.sum(k * m, components=components), components
 

@@ -94,7 +94,7 @@ class ADMMRefitData(RefitDataBase[ProxableScalarFunction[Array]]):
     previous_admm_problem: ConsensusProblem
 
 
-@dataclass
+@dataclass(frozen=True)
 class ADMMFitter(Fitter[ProxableScalarFunction[Array], ADMMRefitData]):
     solver: ConsensusADMMSolver = field(default_factory=ConsensusADMMSolver)
     max_refit_data_size: int = 10  # todo: increase
@@ -108,7 +108,7 @@ class ADMMFitter(Fitter[ProxableScalarFunction[Array], ADMMRefitData]):
             problem_update=problem_update,
             refit_data=refit_data,
         )
-        theta, cost, final_admm_state = self.solver.solve(
+        theta, cost, final_admm_state, _ = self.solver.solve(
             problem=admm_problem,
             initial_state_candidates=refit_data.previous_final_states,
         )
@@ -141,7 +141,7 @@ class ADMMFitter(Fitter[ProxableScalarFunction[Array], ADMMRefitData]):
         problem: StratifiedLinearRegressionProblem[ProxableScalarFunction[Array]],
     ) -> tuple[Theta, ADMMRefitData, float]:
         admm_problem = self._build_admm_problem_from_scratch(problem)
-        theta, cost, final_admm_state = self.solver.solve(
+        theta, cost, final_admm_state, _ = self.solver.solve(
             problem=admm_problem,
         )
         refit_data = ADMMRefitData(
@@ -171,7 +171,11 @@ class ADMMFitter(Fitter[ProxableScalarFunction[Array], ADMMRefitData]):
             for gamma_new, (func, gamma_old) in zip(gammas, previous_admm_problem.f)
         ]
         g = previous_admm_problem.g
-        return ConsensusProblem(f=f, g=g, var_shape=previous_admm_problem.var_shape)
+        return ConsensusProblem(
+            f=tuple(f),
+            g=g,
+            var_shape=previous_admm_problem.var_shape,
+        )
 
     def _build_admm_problem_from_scratch(
         self,
@@ -180,10 +184,10 @@ class ADMMFitter(Fitter[ProxableScalarFunction[Array], ADMMRefitData]):
         f: list[tuple[ProxableScalarFunction[Array], float]] = [
             (self._get_loss(problem), 1.0)
         ]
-        f.extend(problem.regularizers)
+        f.extend(problem.regularizers())
         f.extend(problem.laplacians())
         return ConsensusProblem(
-            f=f,
+            f=tuple(f),
             g=Zero(),  # todo: enforce domain constraints?
             var_shape=problem.theta_shape(),
         )

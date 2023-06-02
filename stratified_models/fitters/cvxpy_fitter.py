@@ -95,7 +95,7 @@ class CVXPYFitter(Fitter[CVXPYScalarFunction, CVXPYRefitData]):
     ) -> tuple[Expression, list[Parameter]]:
         expr = 0.0
         params = []
-        for func, gamma in problem.regularizers:
+        for func, gamma in problem.regularizers():
             param = Parameter(value=gamma, nonneg=True)
             expr += param * func.cvxpy_expression(theta)
             params.append(param)
