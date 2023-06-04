@@ -170,3 +170,30 @@ class SumOfSquaresLoss(QuadraticScalarFunction[Array], ProxableScalarFunction[Ar
 class SumOfSquaresLossFactory(LossFactory[SumOfSquaresLoss]):
     def build_loss_function(self, x: Array, y: Array) -> SumOfSquaresLoss:
         return SumOfSquaresLoss(x, y)
+
+
+@dataclass
+class LogisticOverLinear(ProxableScalarFunction[Array]):
+    """
+    f(x) = sum_i log(1 + exp(a_i'x))
+    """
+
+    # todo: can be generalized to general binary classification l(x;a,y) = p(yax)
+    a: Union[Array, scipy.sparse.spmatrix]
+    _prox_cache: Optional[SumOfSquaresProxCache] = None
+
+    def __call__(self, x: Array) -> float:
+        losses = np.log1p(np.exp(self.a @ x))
+        return float(losses.sum())
+
+    def cvxpy_expression(
+        self,
+        x: cp.Expression,  # type: ignore[name-defined]
+    ) -> cp.Expression:  # type: ignore[name-defined]
+        losses = cp.logistic(self.a @ x)
+        return cp.sum(losses)
+
+
+class LogisticLossFactory(LossFactory[LogisticOverLinear]):
+    def build_loss_function(self, x: Array, y: Array) -> LogisticOverLinear:
+        return LogisticOverLinear(a=x * (-y[:, np.newaxis]))

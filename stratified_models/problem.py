@@ -122,3 +122,9 @@ class Theta:
     ) -> Theta:
         df = cls._get_df_from_array(arr=arr, problem=problem)
         return Theta(df=df, shape=problem.theta_shape())
+
+    # def get_local(self, index: tuple[Hashable, ...]) -> pd.DataFrame:
+    #     return self.df.xs(key=index, axis=0)
+    #
+    # def as_dict(self) -> dict[tuple[Hashable, ...], pd.Series]:
+    #     return dict(self.df.iterrows())

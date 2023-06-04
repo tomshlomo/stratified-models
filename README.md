@@ -65,3 +65,11 @@ Regularized Stratified Models](https://arxiv.org/pdf/2305.02573.pdf)
 * smart initialization strategies:
   * no stratification
   * no stratification, then train a strat model using only the prediction
+
+
+### Tests:
+* no regularization
+* multiple local regularizations
+* more than 2 graphs
+* no graphs
+* no data (expect theta=0)
