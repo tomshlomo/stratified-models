@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from stratified_models.fitters.admm_fitter import ADMMFitter
 from stratified_models.fitters.cvxpy_fitter import CVXPYFitter
 from stratified_models.fitters.fitter import Fitter, RefitDataType
 from stratified_models.losses import LogisticLossFactory
@@ -78,6 +79,7 @@ params = [
     (1e3, 1e3, 1e6, [0] * 6),
 ]
 fitters = [
+    ADMMFitter(),
     CVXPYFitter(),
 ]
 

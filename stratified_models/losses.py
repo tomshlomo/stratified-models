@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from abc import abstractmethod
 from dataclasses import dataclass
+from functools import partial
 from typing import Generic, Optional, TypeVar, Union
 
 import cvxpy as cp
@@ -15,14 +16,18 @@ from stratified_models.scalar_function import (
     ProxableScalarFunction,
     QuadraticScalarFunction,
     ScalarFunction,
+    X,
 )
 
 L = TypeVar("L", bound=ScalarFunction[Array], covariant=True)
 
 
+DenseOrSparseMatrix = Union[Array, scipy.sparse.spmatrix]
+
+
 class LossFactory(Generic[L]):
     @abstractmethod
-    def build_loss_function(self, x: Array, y: Array) -> L:
+    def build_loss_function(self, x: DenseOrSparseMatrix, y: Array) -> L:
         raise NotImplementedError
 
 
@@ -45,7 +50,7 @@ def _to_numpy_array(x: Union[Array, scipy.sparse.spmatrix]) -> Array:
 
 @dataclass
 class SumOfSquaresLoss(QuadraticScalarFunction[Array], ProxableScalarFunction[Array]):
-    a: Union[Array, scipy.sparse.spmatrix]
+    a: DenseOrSparseMatrix
     b: Array
     _prox_cache: Optional[SumOfSquaresProxCache] = None
 
@@ -168,7 +173,7 @@ class SumOfSquaresLoss(QuadraticScalarFunction[Array], ProxableScalarFunction[Ar
 
 
 class SumOfSquaresLossFactory(LossFactory[SumOfSquaresLoss]):
-    def build_loss_function(self, x: Array, y: Array) -> SumOfSquaresLoss:
+    def build_loss_function(self, x: DenseOrSparseMatrix, y: Array) -> SumOfSquaresLoss:
         return SumOfSquaresLoss(x, y)
 
 
@@ -186,6 +191,34 @@ class LogisticOverLinear(ProxableScalarFunction[Array]):
         losses = np.log1p(np.exp(self.a @ x))
         return float(losses.sum())
 
+    def prox(self, v: X, t: float) -> X:
+        # todo: more control over optimizer (method, memory, tolerances, and so on)
+        result = scipy.optimize.minimize(
+            partial(self._prox_eval_with_grad),
+            x0=v,
+            args=(v, 1 / t),
+            method="L-BFGS-B",
+            jac=True,
+        )
+        return result.x
+
+    def _prox_eval_with_grad(
+        self, x: Array, v: Array, rho: float
+    ) -> tuple[float, Array]:
+        """
+        h(x) = sum_i log(1 + exp(a_i'x) + rho/2 norm(x - v)^2
+        grad h(x) = sum_i a_i exp(a_i'x) / (1 + exp(a_i'x) + rho (x - v)
+        """
+        exp_z = np.exp(self.a @ x)
+        h = np.log1p(exp_z).sum()
+        sig_z = exp_z / (1 + exp_z)
+        grad_h = sig_z @ self.a
+
+        x2v = x - v
+        grad_h += rho * x2v
+        h += (x2v @ x2v) * rho / 2
+        return h, grad_h
+
     def cvxpy_expression(
         self,
         x: cp.Expression,  # type: ignore[name-defined]
@@ -195,5 +228,9 @@ class LogisticOverLinear(ProxableScalarFunction[Array]):
 
 
 class LogisticLossFactory(LossFactory[LogisticOverLinear]):
-    def build_loss_function(self, x: Array, y: Array) -> LogisticOverLinear:
-        return LogisticOverLinear(a=x * (-y[:, np.newaxis]))
+    def build_loss_function(
+        self, x: DenseOrSparseMatrix, y: Array
+    ) -> LogisticOverLinear:
+        y = -y[:, np.newaxis]
+        a = x.multiply(y) if isinstance(x, scipy.sparse.spmatrix) else x * y
+        return LogisticOverLinear(a=a)

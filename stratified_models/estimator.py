@@ -5,9 +5,14 @@ from typing import Generic, Hashable, Optional, Union
 
 import numpy as np
 import pandas as pd
+import scipy
 
 from stratified_models.fitters.fitter import Fitter, ProblemUpdate, RefitDataType
-from stratified_models.losses import LossFactory, SumOfSquaresLossFactory
+from stratified_models.losses import (
+    LogisticLossFactory,
+    LossFactory,
+    SumOfSquaresLossFactory,
+)
 from stratified_models.problem import F, StratifiedLinearRegressionProblem, Theta
 from stratified_models.regularization_graph.regularization_graph import (
     RegularizationGraph,
@@ -191,3 +196,43 @@ class StratifiedLinearEstimator(Generic[F, RefitDataType]):
             fitter=fitter,
             warm_start=warm_start,
         )
+
+
+class StratifiedLogisticRegressionClassifier(Generic[F, RefitDataType]):
+    """
+    todo: Not a valid sklearn classifier:
+        cloning will be problematic since init params are not directly stored, and also
+        theta is not directly stored?
+    """
+
+    def __init__(
+        self,
+        regularizers_factories: tuple[tuple[RegularizationFactory[F], float], ...],
+        graphs: tuple[tuple[RegularizationGraph[F], float], ...],
+        regression_features: list[str],
+        fitter: Fitter[F, RefitDataType],
+        warm_start: bool,
+    ) -> None:
+        self.estimator = StratifiedLinearEstimator(
+            loss_factory=LogisticLossFactory(),
+            regularizers_factories=regularizers_factories,
+            graphs=graphs,
+            regression_features=regression_features,
+            fitter=fitter,
+            warm_start=warm_start,
+        )
+
+    def fit(
+        self,
+        X: pd.DataFrame,
+        y: pd.Series,
+    ) -> StratifiedLogisticRegressionClassifier[F, RefitDataType]:
+        self.estimator = self.estimator.fit(X=X, y=y)
+        return self
+
+    def predict_proba(self, X: pd.DataFrame) -> pd.Series:
+        log_odds = self.estimator.predict(X)
+        return scipy.special.expit(log_odds)
+
+    def predict(self, X: pd.DataFrame) -> pd.Series:
+        return np.sign(self.estimator.predict(X))
