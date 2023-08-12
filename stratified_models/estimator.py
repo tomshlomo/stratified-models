@@ -213,7 +213,9 @@ class StratifiedLogisticRegressionClassifier(Generic[F, RefitDataType]):
         fitter: Fitter[F, RefitDataType],
         warm_start: bool,
     ) -> None:
-        self.estimator = StratifiedLinearEstimator(
+        self.estimator: StratifiedLinearEstimator[
+            F, RefitDataType
+        ] = StratifiedLinearEstimator(
             loss_factory=LogisticLossFactory(),
             regularizers_factories=regularizers_factories,
             graphs=graphs,

@@ -21,7 +21,6 @@ from stratified_models.scalar_function import (
 
 L = TypeVar("L", bound=ScalarFunction[Array], covariant=True)
 
-
 DenseOrSparseMatrix = Union[Array, scipy.sparse.spmatrix]
 
 
@@ -200,7 +199,7 @@ class LogisticOverLinear(ProxableScalarFunction[Array]):
             method="L-BFGS-B",
             jac=True,
         )
-        return result.x
+        return result.x  # type:ignore[no-any-return]
 
     def _prox_eval_with_grad(
         self, x: Array, v: Array, rho: float
@@ -223,8 +222,8 @@ class LogisticOverLinear(ProxableScalarFunction[Array]):
         self,
         x: cp.Expression,  # type: ignore[name-defined]
     ) -> cp.Expression:  # type: ignore[name-defined]
-        losses = cp.logistic(self.a @ x)
-        return cp.sum(losses)
+        losses = cp.logistic(self.a @ x)  # type: ignore[attr-defined]
+        return cp.sum(losses)  # type: ignore[attr-defined]
 
 
 class LogisticLossFactory(LossFactory[LogisticOverLinear]):

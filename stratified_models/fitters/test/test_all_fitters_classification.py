@@ -16,7 +16,7 @@ from stratified_models.regularization_graph.networkx_graph import (
 from stratified_models.regularizers import SumOfSquaresRegularizerFactory
 from stratified_models.scalar_function import (
     Array,
-    QuadraticScalarFunction,
+    ProxableScalarFunction,
     ScalarFunction,
 )
 
@@ -26,7 +26,7 @@ def get_problem(
     reg2: float,
     l2_reg: float,
     n: int,
-) -> StratifiedLinearRegressionProblem[QuadraticScalarFunction[Array]]:
+) -> StratifiedLinearRegressionProblem[ProxableScalarFunction[Array]]:
     """
     both       +---           +---       ][      +++-            +++-
     group12    +---               ][             +++-
@@ -115,6 +115,6 @@ def test_fit(
     #     y=list(df_plot.columns[2:]),
     # ).show()
     intercepts = -theta.df["one"] / theta.df["x"]
-    expected_intercepts = np.array(expected_intercepts)
+    expected_intercepts_arr = np.array(expected_intercepts)
     tol = 1e-6 + 1e-3 * theta.df["one"].abs() / theta.df["x"] ** 2
-    assert all(np.abs(intercepts - expected_intercepts) <= tol)
+    assert all(np.abs(intercepts - expected_intercepts_arr) <= tol)
