@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Generic, Hashable, Iterable, TypeVar
 
+import dask.dataframe
 import numpy as np
 import pandas as pd
 
@@ -18,12 +19,12 @@ F = TypeVar("F", bound=ScalarFunction[Array])
 
 @dataclass
 class StratifiedLinearRegressionProblem(Generic[F]):
-    x: pd.DataFrame
-    y: pd.Series
+    df: pd.DataFrame
     loss_factory: LossFactory[F]
     regularizers_factories: tuple[tuple[RegularizationFactory[F], float], ...]
     graphs: tuple[tuple[RegularizationGraph[F], float], ...]
     regression_features: list[str]
+    target_column: str
 
     @property
     def m(self) -> int:
@@ -42,12 +43,10 @@ class StratifiedLinearRegressionProblem(Generic[F]):
     def node_data_iter(
         self,
     ) -> Iterable[tuple[tuple[Hashable, ...], pd.DataFrame, pd.Series,]]:
-        for node, x_slice in self.x.groupby(self.stratification_features)[
-            self.regression_features
-        ]:
+        for node, df_slice in self.df.groupby(self.stratification_features):
             if not isinstance(node, tuple):
                 node = (node,)
-            yield node, x_slice, self.y.loc[x_slice.index]
+            yield node, df_slice[self.regression_features], df_slice[self.target_column]
 
     def laplacians(self) -> Iterable[tuple[F, float]]:
         dims = self.theta_shape()
@@ -90,6 +89,14 @@ class StratifiedLinearRegressionProblem(Generic[F]):
         for lap, gamma in self.laplacians():
             cost += gamma * lap(theta.as_array())
         return cost
+
+    @property
+    def dask_df(self) -> dask.dataframe.DataFrame:
+        return (
+            self.df
+            if isinstance(self.df, dask.dataframe.DataFrame)
+            else dask.dataframe.from_pandas(self.df, npartitions=1)
+        )
 
 
 @dataclass

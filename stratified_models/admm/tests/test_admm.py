@@ -1,5 +1,6 @@
 import cvxpy as cp
 import numpy as np
+from dask.distributed import Client
 
 from stratified_models.admm.admm import ConsensusADMMSolver, ConsensusProblem
 from stratified_models.losses import SumOfSquaresLoss
@@ -99,4 +100,40 @@ def test_non_negative_least_squares() -> None:
     x, cost, state, converged = ConsensusADMMSolver().solve(problem=problem)
     x_exp = b.clip(min=0)
     assert np.linalg.norm(x - x_exp) <= 1e-6
+    assert converged
+
+
+def test_distributed_least_squares() -> None:
+    """
+    b = a theta + noise
+    theta_hat = pinv(a) b
+     = pinv(a) (a theta + noise)
+     = theta + pinv(a) noise
+    E norm( theta_hat - theta)^2 = E norm( pinv(a) noise )^2
+    tr cov (pinv(a) noise) = tr pinv(a) pinv(a)'
+    = tr((a'a)^-1)
+    a'a ~= N I
+    (a'a)^-1
+    :return:
+    """
+    m = 300
+    k = 100
+    n = 1000
+    theta = RNG.standard_normal((m,))
+    f = []
+    for i in range(k):
+        a = RNG.standard_normal((n + i, m))
+        noise = RNG.standard_normal(a.shape[0])
+        b = a @ theta + noise
+        f.append((SumOfSquaresLoss(a=a, b=b), 1.0))
+
+    problem = ConsensusProblem(
+        f=tuple(f),
+        g=Zero(),
+        var_shape=(m,),
+    )
+    client = Client()
+    solver = ConsensusADMMSolver(client=client)
+    theta_hat, cost, state, converged = solver.solve(problem=problem)
+    assert np.linalg.norm(theta_hat - theta) <= np.linalg.norm(theta) * 1e-1
     assert converged

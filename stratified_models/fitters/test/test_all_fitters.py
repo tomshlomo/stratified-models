@@ -43,15 +43,15 @@ def get_problem(
     df2["strat_1"] = 0
 
     df = pd.concat([df1, df2], ignore_index=True)
-    y = pd.Series(data=np.hstack([y, -3 * y]), index=df.index)
+    df["y"] = pd.Series(data=np.hstack([y, -3 * y]), index=df.index)
 
     return StratifiedLinearRegressionProblem(
-        x=df,
-        y=y,
+        df=df,
         loss_factory=SumOfSquaresLossFactory(),
         regularizers_factories=((SumOfSquaresRegularizerFactory(), l2_reg),),
         graphs=((graph1, reg1), (graph2, reg2)),
         regression_features=regression_features,
+        target_column="y",
     )
 
 
@@ -195,15 +195,15 @@ def get_problem_single_graph(
     df2["z"] = 2
 
     df = pd.concat([df1, df2], ignore_index=True)
-    y = pd.Series(data=np.hstack([y, -3 * y]), index=df.index)
+    df["y"] = pd.Series(data=np.hstack([y, -3 * y]), index=df.index)
 
     return StratifiedLinearRegressionProblem(
-        x=df,
-        y=y,
+        df=df,
         loss_factory=SumOfSquaresLossFactory(),
         regularizers_factories=((SumOfSquaresRegularizerFactory(), l2_reg),),
         graphs=((graph, laplace_reg),),
         regression_features=regression_features,
+        target_column="y",
     )
 
 

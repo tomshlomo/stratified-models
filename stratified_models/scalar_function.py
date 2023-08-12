@@ -5,7 +5,9 @@ from dataclasses import dataclass
 from typing import Generic, Optional, Protocol, TypeVar, Union
 
 import cvxpy as cp
+import dask
 import numpy as np
+from dask.delayed import Delayed
 from numpy import typing as npt
 
 from stratified_models.linear_operator import FlattenedTensorDot, Identity
@@ -18,6 +20,9 @@ Array = npt.NDArray[np.float64]
 class ScalarFunction(Protocol[T]):
     def __call__(self, x: T) -> float:
         raise NotImplementedError
+
+    def delayed_eval(self, x: X) -> Delayed:
+        return dask.delayed(self)(x)
 
 
 class QuadraticScalarFunction(ScalarFunction[T], Protocol):
@@ -35,6 +40,9 @@ X = TypeVar("X")
 class ProxableScalarFunction(ScalarFunction[X], Protocol):
     def prox(self, v: X, t: float) -> X:
         raise NotImplementedError
+
+    def delayed_prox(self, v: X, t: float) -> Delayed:
+        return dask.delayed(self.prox)(v, t)
 
 
 @dataclass
@@ -57,6 +65,9 @@ class SumOfSquares(ProxableScalarFunction[Array], QuadraticScalarFunction[Array]
 
     def __call__(self, x: Array) -> float:
         return float((x.ravel() @ x.ravel()) / 2)
+
+    def delayed_eval(self, x: Array) -> Delayed:
+        return dask.delayed(float)((x.ravel() @ x.ravel()) / 2)
 
     def prox(self, v: Array, t: float) -> Array:
         """

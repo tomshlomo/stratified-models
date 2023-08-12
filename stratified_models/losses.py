@@ -6,8 +6,10 @@ from functools import partial
 from typing import Generic, Optional, TypeVar, Union
 
 import cvxpy as cp
+import dask.array
 import numpy as np
 import scipy.sparse
+from dask.delayed import Delayed
 
 from stratified_models.linear_operator import MatrixBasedLinearOperator
 from stratified_models.quadratic import ExplicitQuadraticFunction
@@ -54,10 +56,19 @@ class SumOfSquaresLoss(QuadraticScalarFunction[Array], ProxableScalarFunction[Ar
     b: Array
     _prox_cache: Optional[SumOfSquaresProxCache] = None
 
+    def __post_init__(self) -> None:
+        self._a_dask = dask.array.from_array(self.a)
+        self._b_dask = dask.array.from_array(self.b)
+
     def __call__(self, x: Array) -> float:
         y = self.a @ x
         r = y - self.b
         return float((r @ r) / 2)
+
+    def delayed_eval(self, x: Array) -> Delayed:
+        y = self._a_dask @ x
+        r = y - self._b_dask
+        return (r @ r) / 2
 
     def _get_prox_cache(self) -> SumOfSquaresProxCache:
         if self._prox_cache is not None:

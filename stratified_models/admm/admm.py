@@ -2,10 +2,13 @@ from __future__ import annotations
 
 import math
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional
 
+import dask
 import numpy as np
+from dask.delayed import Delayed, delayed
+from dask.distributed import Client, Future
 
 from stratified_models.scalar_function import Array, ProxableScalarFunction
 
@@ -21,8 +24,28 @@ class ConsensusProblem:
     def n(self) -> int:
         return len(self.f)
 
-    def cost(self, x: Array) -> float:
+    def future_cost(self, x: Array, client: Client) -> Future:
+        return client.submit(self.delayed_cost(x).compute)
+
+    def delayed_cost(self, x: Array) -> Delayed:
+        items = [ff.delayed_eval(x) * gamma for ff, gamma in self.f]
+        items.append(self.g.delayed_eval(x))
+        return sum(items)
+
+    def cost(self, x: Array, scheduler: Optional[str] = None) -> float:
+        return (
+            self._delayed_cost(x, scheduler=scheduler)
+            if scheduler
+            else self._sequential_cost(x)
+        )
+
+    def _sequential_cost(self, x: Array) -> float:
         return sum(ff(x) * gamma for ff, gamma in self.f) + self.g(x)
+
+    def _delayed_cost(self, x: Array, scheduler: str) -> float:
+        items = [delayed(ff)(x) * gamma for ff, gamma in self.f]
+        items.append(delayed(self.g)(x))
+        return delayed(sum)(items).compute(scheduler=scheduler)
 
 
 @dataclass
@@ -80,6 +103,7 @@ def norms(x: Array) -> Array:
 
 @dataclass
 class ConsensusADMMSolver:
+    client: Client = field(default_factory=Client)
     max_iterations: int = 1000
     eps_abs: float = 1e-6
     eps_rel: float = 1e-4
@@ -88,6 +112,9 @@ class ConsensusADMMSolver:
     tau_decr: float = 1 / 2
     k: int = 20  # todo: rename
     tau: float = 5  # todo: rename
+    scheduler: str = "threads"
+
+    # todo: verbose
 
     def solve(
         self,
@@ -95,13 +122,16 @@ class ConsensusADMMSolver:
         initial_state_candidates: Optional[list[ADMMState]] = None,
     ) -> tuple[Array, float, ADMMState, bool]:
         initial_state_candidates = initial_state_candidates or []
-        state = self._get_init_state(
+        state, best_cost = self._get_init_state(
             initial_state_candidates=initial_state_candidates,
             problem=problem,
         )
-        best_cost = problem.cost(state.z)
+        # best_cost_delayed = problem.delayed_cost(state.z)
+        # best_cost_future = self.client.submit(best_cost_delayed.compute)
+        costs_vec = np.empty(self.max_iterations + 1)
+        costs_vec[0] = best_cost
+        converged = False
         best_z = state.z
-        costs_vec = np.empty(self.max_iterations)
         print("Starting ADMM iterations")
         print(
             f"{'iteration':10s} "
@@ -112,16 +142,20 @@ class ConsensusADMMSolver:
         )
         print(" ".join(["=" * 10] * 5))
         start = time.time()
-        converged = False
         for i in range(self.max_iterations):
-            state_tmp = self._t_update(state=state)
-            state = self._step(problem, state_tmp)
+            state = self._step(problem, state)
+
+            # tic = time.time()
+            # cost = problem.delayed_cost(state.z).compute()
+            # toc = time.time() - tic
+            # tic = time.time()
             cost = problem.cost(state.z)
-            costs_vec[i] = cost
+            # toc2 = time.time() - tic
+
             if cost <= best_cost:
                 best_cost = cost
                 best_z = state.z
-
+            costs_vec[i + 1] = cost
             print(
                 f"{i:10d} "
                 f"{time.time() - start:10.2f} "
@@ -129,6 +163,7 @@ class ConsensusADMMSolver:
                 f"{state.primal_residual_norm:10.3e} "
                 f"{state.dual_residual_norm:10.3e}"
             )
+
             if self._stop(
                 state=state,
                 problem=problem,
@@ -137,6 +172,30 @@ class ConsensusADMMSolver:
             ):
                 converged = True
                 break
+            state = self._t_update(state=state)
+            # cost = problem.delayed_cost(state.z).compute()
+            # if i == 0:
+            #     best_cost = best_cost_future.result()
+            # costs_vec[i] = cost.result()
+            # if cost <= best_cost:
+            #     best_cost = cost
+            #     best_z = state.z
+
+            # print(
+            #     f"{i:10d} "
+            #     f"{time.time() - start:10.2f} "
+            #     f"{cost:10.3e} "
+            #     f"{state.primal_residual_norm:10.3e} "
+            #     f"{state.dual_residual_norm:10.3e}"
+            # )
+            # if self._stop(
+            #     state=state,
+            #     problem=problem,
+            #     costs=costs_vec,
+            #     i=i,
+            # ):
+            #     converged = True
+            #     break
         return best_z, best_cost, state, converged
 
     def _step(
@@ -144,29 +203,117 @@ class ConsensusADMMSolver:
         problem: ConsensusProblem,
         state: ADMMState,
     ) -> ADMMStateWithStopInfo:
+
+        # def foo(x, t, w):
+        #     # Convert the numpy arrays to Dask arrays
+        #     dask_arrays = [da.from_array(xx) for xx in x]
+        #
+        #     # Apply each delayed function to the corresponding array
+        #     delayed_results = [
+        #     f.prox(xx, tt * gamma) * ww
+        #     for (f, gamma), tt, ww, xx in zip(problem.f, t, w, dask_arrays)
+        #     ]
+        #
+        #     # Stack the resulting arrays along a new dimension
+        #     stacked_array = da.stack(delayed_results, axis=0)
+        #
+        #     # Sum the stacked array along the newly added dimension
+        #     # result = da.sum(stacked_array, axis=0)
+        #     return stacked_array
+
+        # @dask.delayed
+        # def foo(x, t, w):
+        #     for xx, tt, ww, (f, gamma) in zip(x, t, w, problem.f):
+        #         xx_new = dask.delayed(f.prox)(xx, tt * gamma)
+        #         xx_new *= ww
+        #
+        #         # xx_new = dask.delayed(lambda xx, tt, ww: ww * f.prox(xx, t * gamma))
+
+        # delayed_f_prox = [
+        #     dask.delayed(lambda xx, tt: f.prox(xx, tt*gamma))
+        #     # dask.delayed(lambda xx, tt, ww: ww * f.prox(xx, t*gamma), pure=True)
+        #     for f, gamma in problem.f
+        # ]
+        # optimized_graph = dask.compute(*delayed_f_prox, optimize_graph=True)
+
         t, u, z, rho = state.t, state.u, state.z, state.rho
         total_rho = float(np.sum(rho))
         w = rho / total_rho
 
         # x update
-        new_x = np.array(
-            [
-                f.prox(z - uu, tt * gamma)
-                for (f, gamma), uu, tt in zip(
-                    problem.f, u, t
-                )  # todo: we don't need x in the state
-            ]
-        )
+        x_tmp = z - u
+
+        # new_x = np.array(
+        #     [
+        #         f.prox(xx, tt * gamma)
+        #         for (f, gamma), xx, tt in zip(
+        #             problem.f, x_tmp, t
+        #         )  # todo: we don't need x in the state
+        #     ]
+        # )
+        new_x = [
+            f.delayed_prox(xx, tt * gamma)
+            for (f, gamma), xx, tt in zip(
+                problem.f, x_tmp, t
+            )  # todo: we don't need x in the state
+        ]
+
+        # new_x = [
+        #         dask.delayed(f.prox)(xx, tt * gamma)
+        #         for (f, gamma), xx, tt in zip(
+        #         problem.f, x_tmp, t
+        #     )  # todo: we don't need x in the state
+        # ]
+        new_x = np.array(dask.compute(*new_x, scheduler=self.scheduler))
+        # #
+        # new_x0 = delayed_f_prox[0](x_tmp[0], t[0]).compute(scheduler="synchronous")
+        # new_x1 = delayed_f_prox[1](x_tmp[1], t[1])
+        # x_tmp = z - u
+        # new_x_delayed = [
+        #     p(xx, tt)
+        #     for p, xx, tt in zip(delayed_f_prox, x_tmp, t)
+        # ]
+        # new_x2 = np.array(dask.compute(*new_x_delayed, scheduler="synchronous"))
+        # x_tmp = z - u
+        # new_x = foo(x_tmp, t, w).compute()
+        # new_x_bar_graph = foo(x_tmp, t, w)
+        # new_x_bar_graph2 = dask.compute(new_x_bar_graph, optimized_graph=True)
+        # new_x_bar = dask.compute(new_x_bar_graph2)
+        # t_tmp = np.array(t) * np.array([gamma for _, gamma in problem.f])
+
+        # b = db.from_sequence(zip(problem.f, u, t))
+        # b = db.from_sequence(zip(problem.f, u, t), npartitions=problem.n)
+        # b = db.from_sequence(zip(problem.f, u, t), npartitions=1)
+
+        # def foo(tup):
+        #     (f, gamma), uu, tt = tup
+        #     return f.prox(z - uu, tt * gamma)
+        #
+        # new_x = np.array(b.map(foo).compute(scheduler="synchronous"))
+        # new_x = np.array(b.map(foo).compute(scheduler="synchronous"))
+        # new_x = np.array(b.map(foo).compute(scheduler="threads"))
+
+        # new_x = np.array(
+        #     [
+        #         f.prox(z - uu, tt * gamma)
+        #         for (f, gamma), uu, tt in zip(
+        #             problem.f, u, t
+        #         )
+        #     ]
+        # )
 
         # z update
-        u_bar = np.einsum("i,i...->...", w, u)
+        u_bar = np.einsum(
+            "i,i...->...", w, u
+        )  # todo: can be calculated in parallel to new_x
         new_x_bar = np.einsum("i,i...->...", w, new_x)
         new_z = problem.g.prox(new_x_bar + u_bar, 1 / total_rho)
 
         # u update
         primal_residual = new_x - new_z
-        new_u = u + primal_residual
 
+        # todo: parallelize these 3 lines
+        new_u = u + primal_residual
         primal_residual_norms = norms(primal_residual)
         dual_residual_norms = norm(state.z - new_z) * rho
         return ADMMStateWithStopInfo(
@@ -214,13 +361,13 @@ class ConsensusADMMSolver:
         sum(cost[j] - cost[j+1] j=i...) = cost[i] - p*
         where p* is the optimal value.
         let:
-        x[i] = log(cost[i] - cost[i-1])
+        y[i] = log(cost[i] - cost[i-1])
         and assume we have a and b such that:
-        x[i] = a + b*i
+        y[i] = a + b*i
         (which is equivalent to assuming cost[i] = p* + cost0 * exp(-i/tau))
 
         then:
-        p* = cost[i] - sum(exp(x[j]) for j=i..)
+        p* = cost[i] - sum(exp(y[j]) for j=i..)
            = cost[i] - sum(exp(a + b*j) for j=i..)
            = cost[i] - exp(a + bi) / (1 - exp(b))
         for convenience we will always reindex such that i=0
@@ -231,12 +378,12 @@ class ConsensusADMMSolver:
         y = np.log(-np.diff(costs[-(self.k + 1) :]))
         mask = np.isnan(y)
         y[mask] = 0.0
-        x = np.arange(-self.k + 1, 1)
-        w = 2.0 ** (x / self.tau)
+        i = np.arange(-self.k + 1, 1)
+        w = 2.0 ** (i / self.tau)
         w[mask] = 0.0
         # todo: use cov=True, and estimate a lower bound on p
         #  using the covariance + delta method? might be an overkill
-        z = np.polyfit(x=x, y=y, deg=1, w=w)
+        z = np.polyfit(x=i, y=y, deg=1, w=w)
         b, a = z
         delta = np.exp(a) / (1 - np.exp(b))
         return float(costs[-1] - delta)
@@ -263,17 +410,29 @@ class ConsensusADMMSolver:
         self,
         problem: ConsensusProblem,
         initial_state_candidates: list[ADMMState],
-    ) -> ADMMStateWithStopInfo:
+    ) -> tuple[ADMMState, float]:
         zero_state = self._get_zero_state(problem=problem)
-        initial_state_candidates.append(zero_state)
+        if not initial_state_candidates:
+            # tic = time.time()
+            # cost2 = problem.delayed_cost(zero_state.z).compute()
+            # toc = time.time() - tic
+            # tic = time.time()
+            cost = problem.cost(zero_state.z)
+            # toc2 = time.time() - tic
+            return zero_state, cost
 
+        raise NotImplementedError("dont forget to parallelize")
+        initial_state_candidates.append(zero_state)
         # advance one step for each state
         next_states = map(
             lambda state: self._step(problem, state), initial_state_candidates
         )
 
         # return state with the lowest cost
-        return min(next_states, key=lambda state: problem.cost(state.z))
+        return min(
+            next_states,
+            key=lambda state: problem.cost(state.z, scheduler=self.scheduler),
+        )
 
     def _get_zero_state(self, problem: ConsensusProblem) -> ADMMState:
         return ADMMState(

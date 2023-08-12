@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from typing import Hashable, Iterable
 
 import numpy as np
+import pandas as pd
 import scipy
 
 from stratified_models.admm.admm import ADMMState, ConsensusADMMSolver, ConsensusProblem
@@ -200,7 +201,7 @@ class ADMMFitter(Fitter[ProxableScalarFunction[Array], ADMMRefitData]):
         cols_so_far = 0
         max_rank = max(1024, problem.m)
         cluster = NodesCluster.empty()
-        for node, x_slice, _ in problem.node_data_iter():
+        for node, x_slice, y_slice in problem.node_data_iter():
             size = x_slice.shape[0]
             if min(rows_so_far + size, cols_so_far + problem.m) > max_rank:
                 yield cluster
@@ -210,16 +211,44 @@ class ADMMFitter(Fitter[ProxableScalarFunction[Array], ADMMRefitData]):
             rows_so_far += size
             cols_so_far += problem.m
             cluster.nodes.append(node)
-            cluster.x_slices.append(x_slice[problem.regression_features].values)
-            cluster.y_slices.append(problem.y[x_slice.index].values)
+            cluster.x_slices.append(x_slice.values)
+            cluster.y_slices.append(y_slice.values)
         if not cluster.is_empty:
             yield cluster
 
     def _get_loss(
-        self, problem: StratifiedLinearRegressionProblem[ProxableScalarFunction[Array]]
+        self,
+        problem: StratifiedLinearRegressionProblem[ProxableScalarFunction[Array]],
     ) -> LossForADMM:
         print("starting ADMMFitter._get_loss()")
         start = time.time()
+
+        def process_group(group):
+            pass
+            return problem.loss_factory.build_loss_function(
+                x=group[problem.regression_features].values,
+                y=group[problem.target_column].values,
+            )
+
+        # agg = dd.Aggregation(
+        #     name='loss_for_admm',
+        #     chunk=lambda chunk: problem.loss_factory.build_loss_function(
+        #         x=problem.df[problem.regression_features].values,
+        #         y=problem.df[problem.target_column].values,
+        #     ),
+        #
+        # )
+        # problem.df.groupby(problem.stratification_features).agg(agg)
+        result = (
+            problem.dask_df.groupby(problem.stratification_features)
+            .apply(process_group, meta=("local_loss", object))
+            .compute()
+        )
+        for i, level in enumerate(result.index.levels):
+            result.index = result.index.set_levels(level.astype(int), level=i)
+
+        return LossForAdmmWithDask(losses=result)
+        # loss(np.zeros(problem.theta_shape()))
         losses = []
         for nodes_cluster in self._get_node_clusters(problem):
             loss = problem.loss_factory.build_loss_function(
@@ -265,6 +294,20 @@ class NodesClusterLossData:
     @property
     def size(self) -> int:
         return len(self.nodes_indices)
+
+
+class LossForAdmmWithDask(ProxableScalarFunction[Array]):
+    def __init__(self, losses: pd.Series) -> None:
+        self._losses = losses
+
+    def __call__(self, x: Array) -> float:
+        import dask.bag as db
+
+        bag = db.from_sequence(self._losses.items()).map(lambda i_f: i_f[1](x[i_f[0]]))
+        return bag.sum().compute()
+
+    def prox(self, v: Array, t: float) -> Array:
+        pass
 
 
 @dataclass

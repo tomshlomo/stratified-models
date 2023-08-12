@@ -22,6 +22,8 @@ plotly = "^5.11.0"
 tqdm = "^4.64.1"
 xarray = "^2023.2.0"
 pre-commit = "^3.2.2"
+dask = {extras = ["distributed"], version = "^2023.6.0"}
+bokeh = "^3.2.1"
 
 
 [tool.poetry.group.dev.dependencies]
@@ -88,3 +90,4 @@ profile = "black"
 
 [tool.pytest.ini_options]
 capture = "no"
+log_cli = 1

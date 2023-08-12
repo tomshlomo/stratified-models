@@ -55,12 +55,10 @@ def get_problem(
         dfs.append(df)
     df = pd.concat(dfs, ignore_index=True)
     df["one"] = 1.0
-    y = df["y"]
-    df = df.drop(columns=["y"])
 
     return StratifiedLinearRegressionProblem(
-        x=df,
-        y=y,
+        df=df,
+        target_column="y",
         loss_factory=LogisticLossFactory(),
         regularizers_factories=((SumOfSquaresRegularizerFactory(), l2_reg),),
         graphs=((graph1, reg1), (graph2, reg2)),

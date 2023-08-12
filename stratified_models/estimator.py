@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Generic, Hashable, Optional, Union
 
+import dask.dataframe as dd
 import numpy as np
 import pandas as pd
 import scipy
@@ -22,6 +23,7 @@ from stratified_models.regularizers import (
     SumOfSquaresRegularizerFactory,
 )
 from stratified_models.scalar_function import Array, ProxableScalarFunction
+from stratified_models.utils.dataframe_utils import get_ununsed_column_name
 
 
 @dataclass
@@ -107,15 +109,19 @@ class StratifiedLinearEstimator(Generic[F, RefitDataType]):
         )
 
     def _get_problem(
-        self, x: pd.DataFrame, y: pd.Series
+        self, x: dd.DataFrame, y: dd.Series
     ) -> StratifiedLinearRegressionProblem[F]:
+        if not isinstance(y.name, str) or y.name in x.columns:
+            y = y.copy()
+            y.name = get_ununsed_column_name(x, "y")
+        df = dd.concat([x, y.to_frame()], axis=1)
         return StratifiedLinearRegressionProblem(
-            x=x,
-            y=y,
+            df=df,
             loss_factory=self.loss_factory,
             regularizers_factories=self.regularizers_factories,
             graphs=self.graphs,
             regression_features=self.regression_features,
+            target_column=y.name,
         )
 
     def _get_problem_update(

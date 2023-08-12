@@ -26,8 +26,8 @@ class ProblemUpdate:
         self, problem: StratifiedLinearRegressionProblem[F]
     ) -> StratifiedLinearRegressionProblem[F]:
         return StratifiedLinearRegressionProblem(
-            x=problem.x,
-            y=problem.y,
+            df=problem.df,
+            target_column=problem.target_column,
             loss_factory=problem.loss_factory,
             regularizers_factories=tuple(
                 (f, gamma)

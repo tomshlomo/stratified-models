@@ -1,6 +1,8 @@
 from dataclasses import dataclass, field
 from typing import Tuple
 
+import dask as dd
+import dask.dataframe
 import networkx as nx
 import numpy as np
 import pandas as pd
@@ -76,14 +78,22 @@ class DataGenerator:
         self,
         n: int,
         theta: pd.DataFrame,
-    ) -> Tuple[pd.DataFrame, pd.Series]:
+    ) -> Tuple[dd.dataframe.DataFrame, dd.dataframe.Series]:
         df = self.get_df(n)
         y = self.get_y(df, theta)
+        df = dd.dataframe.from_pandas(df, npartitions=2)
+        y = dd.dataframe.from_pandas(y, npartitions=2)
         return df, y
 
     def generate(
         self, n_train: int, n_test: int
-    ) -> Tuple[pd.DataFrame, pd.Series, pd.DataFrame, pd.Series, pd.DataFrame,]:
+    ) -> Tuple[
+        dd.dataframe.DataFrame,
+        dd.dataframe.Series,
+        dd.dataframe.DataFrame,
+        dd.dataframe.Series,
+        pd.DataFrame,
+    ]:
         theta = self.get_theta()
         df_train, y_train = self.generate_df_y(n=n_train, theta=theta)
         df_test, y_test = self.generate_df_y(n=n_test, theta=theta)
