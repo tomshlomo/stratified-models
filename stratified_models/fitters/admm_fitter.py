@@ -1,13 +1,16 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+import time
+from dataclasses import dataclass, field
+from typing import Hashable, Iterable
 
 import numpy as np
 import pandas as pd
+import scipy
 
-from stratified_models.admm.admm import ConsensusADMMSolver, ConsensusProblem
-from stratified_models.fitters.fitter import Fitter, Theta
-from stratified_models.problem import StratifiedLinearRegressionProblem
+from stratified_models.admm.admm import ADMMState, ConsensusADMMSolver, ConsensusProblem
+from stratified_models.fitters.fitter import Fitter, ProblemUpdate, RefitDataBase
+from stratified_models.problem import StratifiedLinearRegressionProblem, Theta
 from stratified_models.scalar_function import Array, ProxableScalarFunction, Zero
 
 """
@@ -86,73 +89,251 @@ u <- u + theta - theta_tilde
 """
 
 
-# @dataclass
-class ADMMFitter(Fitter[ProxableScalarFunction[Array]]):
-    # solver: ConsensusADMMSolver
+@dataclass
+class ADMMRefitData(RefitDataBase[ProxableScalarFunction[Array]]):
+    previous_final_states: list[ADMMState]
+    previous_admm_problem: ConsensusProblem
+
+
+@dataclass(frozen=True)
+class ADMMFitter(Fitter[ProxableScalarFunction[Array], ADMMRefitData]):
+    solver: ConsensusADMMSolver = field(default_factory=ConsensusADMMSolver)
+    max_refit_data_size: int = 10  # todo: increase
+
+    def refit(
+        self,
+        problem_update: ProblemUpdate,
+        refit_data: ADMMRefitData,
+    ) -> tuple[Theta, ADMMRefitData, float]:
+        admm_problem = self._build_admm_problem_from_previous(
+            problem_update=problem_update,
+            refit_data=refit_data,
+        )
+        theta, cost, final_admm_state, _ = self.solver.solve(
+            problem=admm_problem,
+            initial_state_candidates=refit_data.previous_final_states,
+        )
+        refit_data_out = self._update_refit_data(
+            refit_data_in=refit_data,
+            final_admm_state=final_admm_state,
+        )
+        return (
+            Theta.from_array(arr=theta, problem=refit_data.previous_problem),
+            refit_data_out,
+            cost,
+        )
+
+    def _update_refit_data(
+        self,
+        refit_data_in: ADMMRefitData,
+        final_admm_state: ADMMState,
+    ) -> ADMMRefitData:
+        previous_final_states = [final_admm_state] + refit_data_in.previous_final_states
+        if len(previous_final_states) > self.max_refit_data_size:
+            previous_final_states = previous_final_states[: self.max_refit_data_size]
+        return ADMMRefitData(
+            previous_final_states=previous_final_states,
+            previous_admm_problem=refit_data_in.previous_admm_problem,
+            previous_problem=refit_data_in.previous_problem,
+        )
 
     def fit(
         self,
         problem: StratifiedLinearRegressionProblem[ProxableScalarFunction[Array]],
-    ) -> Theta:
-        admm_problem = self._build_admm_problem(problem)
-        theta, cost, final_admm_state = ConsensusADMMSolver().solve(
-            admm_problem,
-            x0=np.zeros(problem.theta_shape()),
-            y0=np.zeros((admm_problem.n, *problem.theta_shape())),
-            t0=1.0,  # todo: smart t0
+    ) -> tuple[Theta, ADMMRefitData, float]:
+        admm_problem = self._build_admm_problem_from_scratch(problem)
+        theta, cost, final_admm_state, _ = self.solver.solve(
+            problem=admm_problem,
         )
-        theta_df = pd.DataFrame(  # todo: should be a common function
-            theta.reshape(problem.theta_flat_shape()),
-            index=pd.MultiIndex.from_product(
-                graph.nodes for graph, _ in problem.graphs
-            ),
-            columns=problem.regression_features,
+        refit_data = ADMMRefitData(
+            previous_final_states=[final_admm_state],
+            previous_admm_problem=admm_problem,
+            previous_problem=problem,
         )
-        return Theta(df=theta_df)
+        return (
+            Theta.from_array(arr=theta, problem=problem),
+            refit_data,
+            cost,
+        )
 
-    def _build_admm_problem(
-        self, problem: StratifiedLinearRegressionProblem[ProxableScalarFunction[Array]]
+    @staticmethod
+    def _build_admm_problem_from_previous(
+        problem_update: ProblemUpdate,
+        refit_data: ADMMRefitData,
     ) -> ConsensusProblem:
-        # problem.
-        # k, m = problem.theta_flat_shape()
-        # km = k * m
+        previous_admm_problem = refit_data.previous_admm_problem
+        gammas = (
+            [1.0]
+            + problem_update.new_regularization_gammas
+            + problem_update.new_graph_gammas
+        )
+        f = [
+            (func, gamma_new)
+            for gamma_new, (func, gamma_old) in zip(gammas, previous_admm_problem.f)
+        ]
+        g = previous_admm_problem.g
+        return ConsensusProblem(
+            f=tuple(f),
+            g=g,
+            var_shape=previous_admm_problem.var_shape,
+        )
+
+    def _build_admm_problem_from_scratch(
+        self,
+        problem: StratifiedLinearRegressionProblem[ProxableScalarFunction[Array]],
+    ) -> ConsensusProblem:
         f: list[tuple[ProxableScalarFunction[Array], float]] = [
             (self._get_loss(problem), 1.0)
         ]
-        f.extend(problem.regularizers)
+        f.extend(problem.regularizers())
         f.extend(problem.laplacians())
-        # f.extend(self._get_laplacian_regularizers(problem))
         return ConsensusProblem(
-            f=f,
-            g=Zero(),  # enforce domain constraints?
+            f=tuple(f),
+            g=Zero(),  # todo: enforce domain constraints?
+            var_shape=problem.theta_shape(),
         )
 
+    def _get_node_clusters(
+        self,
+        problem: StratifiedLinearRegressionProblem[ProxableScalarFunction[Array]],
+    ) -> Iterable[NodesCluster]:
+        rows_so_far = 0
+        cols_so_far = 0
+        max_rank = max(1024, problem.m)
+        cluster = NodesCluster.empty()
+        for node, x_slice, y_slice in problem.node_data_iter():
+            size = x_slice.shape[0]
+            if min(rows_so_far + size, cols_so_far + problem.m) > max_rank:
+                yield cluster
+                rows_so_far = 0
+                cols_so_far = 0
+                cluster = NodesCluster.empty()
+            rows_so_far += size
+            cols_so_far += problem.m
+            cluster.nodes.append(node)
+            cluster.x_slices.append(x_slice.values)
+            cluster.y_slices.append(y_slice.values)
+        if not cluster.is_empty:
+            yield cluster
+
     def _get_loss(
-        self, problem: StratifiedLinearRegressionProblem[ProxableScalarFunction[Array]]
+        self,
+        problem: StratifiedLinearRegressionProblem[ProxableScalarFunction[Array]],
     ) -> LossForADMM:
+        print("starting ADMMFitter._get_loss()")
+        start = time.time()
+
+        def process_group(group):
+            pass
+            return problem.loss_factory.build_loss_function(
+                x=group[problem.regression_features].values,
+                y=group[problem.target_column].values,
+            )
+
+        # agg = dd.Aggregation(
+        #     name='loss_for_admm',
+        #     chunk=lambda chunk: problem.loss_factory.build_loss_function(
+        #         x=problem.df[problem.regression_features].values,
+        #         y=problem.df[problem.target_column].values,
+        #     ),
+        #
+        # )
+        # problem.df.groupby(problem.stratification_features).agg(agg)
+        result = (
+            problem.dask_df.groupby(problem.stratification_features)
+            .apply(process_group, meta=("local_loss", object))
+            .compute()
+        )
+        for i, level in enumerate(result.index.levels):
+            result.index = result.index.set_levels(level.astype(int), level=i)
+
+        return LossForAdmmWithDask(losses=result)
+        # loss(np.zeros(problem.theta_shape()))
         losses = []
-        for loss, node in problem.loss_iter():
-            index = problem.get_node_index(node)
-            losses.append((loss, index))
+        for nodes_cluster in self._get_node_clusters(problem):
+            loss = problem.loss_factory.build_loss_function(
+                x=scipy.sparse.block_diag(nodes_cluster.x_slices),
+                y=np.concatenate(nodes_cluster.y_slices),
+            )
+            losses.append(
+                NodesClusterLossData(
+                    nodes_indices=[
+                        problem.get_node_index(node) for node in nodes_cluster.nodes
+                    ],
+                    loss=loss,
+                )
+            )
+        print(f"  building loss took {time.time() - start} seconds")
         return LossForADMM(losses=losses)
 
-    # def _get_laplacian_regularizers(
-    #         self,
-    #         problem: StratifiedLinearRegressionProblem[ProxableScalarFunction[Array]],
-    # ) -> list[tuple[ProxableScalarFunction[Array][Theta], float]]:
-    #     problem.laplacians()
+
+@dataclass
+class NodesCluster:
+    nodes: list[tuple[Hashable, ...]]
+    x_slices: list[Array]
+    y_slices: list[Array]
+
+    @classmethod
+    def empty(cls) -> NodesCluster:
+        return NodesCluster(
+            nodes=[],
+            x_slices=[],
+            y_slices=[],
+        )
+
+    @property
+    def is_empty(self) -> bool:
+        return not self.nodes
+
+
+@dataclass
+class NodesClusterLossData:
+    nodes_indices: list[tuple[int, ...]]
+    loss: ProxableScalarFunction[Array]
+
+    @property
+    def size(self) -> int:
+        return len(self.nodes_indices)
+
+
+class LossForAdmmWithDask(ProxableScalarFunction[Array]):
+    def __init__(self, losses: pd.Series) -> None:
+        self._losses = losses
+
+    def __call__(self, x: Array) -> float:
+        import dask.bag as db
+
+        bag = db.from_sequence(self._losses.items()).map(lambda i_f: i_f[1](x[i_f[0]]))
+        return bag.sum().compute()
+
+    def prox(self, v: Array, t: float) -> Array:
+        pass
 
 
 @dataclass
 class LossForADMM(ProxableScalarFunction[Array]):
-    losses: list[tuple[ProxableScalarFunction[Array], tuple[int, ...]]]
+    losses: list[NodesClusterLossData]
+
+    @staticmethod
+    def _concatenate_variables_cluster(
+        x: Array, cluster: NodesClusterLossData
+    ) -> Array:
+        return np.concatenate([x[index] for index in cluster.nodes_indices])
 
     def __call__(self, x: Array) -> float:
-        return sum(loss(x[index]) for loss, index in self.losses)
+        return sum(
+            loss_data.loss(self._concatenate_variables_cluster(x, loss_data))
+            for loss_data in self.losses
+        )
 
     def prox(self, v: Array, t: float) -> Array:
         x = v.copy()
-        for loss, index in self.losses:
-            local_theta = v[index]
-            x[index] = loss.prox(local_theta, t)
+        for loss_data in self.losses:
+            x_local = loss_data.loss.prox(
+                v=self._concatenate_variables_cluster(v, loss_data),
+                t=t,
+            )
+            x_local = x_local.reshape((loss_data.size, -1))
+            for i, x_node in zip(loss_data.nodes_indices, x_local):
+                x[i] = x_node
         return x

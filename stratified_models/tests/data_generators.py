@@ -1,19 +1,13 @@
-# type: ignore
 from dataclasses import dataclass, field
 from typing import Tuple
 
+import dask as dd
+import dask.dataframe
 import networkx as nx
 import numpy as np
 import pandas as pd
 import scipy
 
-from stratified_models.fitters.admm_fitter import ADMMFitter
-from stratified_models.losses import SumOfSquaresLossFactory
-from stratified_models.problem import StratifiedLinearRegressionProblem
-from stratified_models.regularization_graph.networkx_graph import (
-    NetworkXRegularizationGraph,
-)
-from stratified_models.scalar_function import SumOfSquares
 from stratified_models.utils.networkx_utils import cartesian_product
 
 RNG = np.random.default_rng(42)
@@ -21,14 +15,13 @@ RNG = np.random.default_rng(42)
 
 @dataclass
 class DataGenerator:
-    n: int = 100_000
     m: int = 10
-    graphs: list[Tuple[nx.Graph, float]] = field(
-        default_factory=lambda: [
+    graphs: tuple[Tuple[nx.Graph, float], ...] = field(
+        default_factory=lambda: (
             (nx.cycle_graph(20), 0.9),
             (nx.path_graph(10), 0.5),
             (nx.path_graph(12), 0.1),
-        ]
+        )
     )
     smoothing_iters: int = 20
     sigma: float = 1e-1
@@ -53,7 +46,9 @@ class DataGenerator:
         for _ in range(self.smoothing_iters):
             theta = a @ theta
         return pd.DataFrame(
-            theta, index=pd.MultiIndex.from_tuples(graph.nodes), columns=regression_cols
+            theta,
+            index=pd.MultiIndex.from_tuples(graph.nodes),
+            columns=regression_cols,
         )
 
     def get_y(self, df: pd.DataFrame, theta: pd.DataFrame) -> pd.Series:
@@ -68,42 +63,38 @@ class DataGenerator:
         y = (df.loc[:, regression_cols] * theta_aligned.loc[:, regression_cols]).sum(
             axis=1
         )
-        y += RNG.standard_normal(self.n) * self.sigma
+        y += RNG.standard_normal(y.shape[0]) * self.sigma
         return y
 
-    def get_df(self) -> pd.DataFrame:
+    def get_df(self, n: int) -> pd.DataFrame:
         regression_cols = self.regression_features()
         strat_cols = self.stratification_features()
-        df = pd.DataFrame(
-            RNG.standard_normal((self.n, self.m)), columns=regression_cols
-        )
+        df = pd.DataFrame(RNG.standard_normal((n, self.m)), columns=regression_cols)
         for (graph, _), col in zip(self.graphs, strat_cols):
-            df[col] = RNG.integers(0, graph.number_of_nodes(), self.n)
+            df[col] = RNG.integers(0, graph.number_of_nodes(), n)
         return df
 
-    def generate(self) -> Tuple[pd.DataFrame, pd.Series, pd.DataFrame]:
-        theta = self.get_theta()
-        df = self.get_df()
+    def generate_df_y(
+        self,
+        n: int,
+        theta: pd.DataFrame,
+    ) -> Tuple[dd.dataframe.DataFrame, dd.dataframe.Series]:
+        df = self.get_df(n)
         y = self.get_y(df, theta)
-        return df, y, theta
+        df = dd.dataframe.from_pandas(df, npartitions=2)
+        y = dd.dataframe.from_pandas(y, npartitions=2)
+        return df, y
 
-
-if __name__ == "__main__":
-    gen = DataGenerator()
-    df, y, theta_true = gen.generate()
-    graphs = []
-    for (graph, weight), name in zip(gen.graphs, gen.stratification_features()):
-        reg = 1 / (1 - weight)
-        # nx.set_edge_attributes(
-        #     graph, reg, NetworkXRegularizationGraph.LAPLACE_REG_PARAM_KEY
-        # )
-        graphs.append((NetworkXRegularizationGraph(graph, name), reg))
-    problem = StratifiedLinearRegressionProblem(
-        x=df,
-        y=y,
-        loss_factory=SumOfSquaresLossFactory(),
-        regularizers=[(SumOfSquares(len(gen.regression_features())), 100)],
-        graphs=graphs,
-        regression_features=gen.regression_features(),
-    )
-    theta = ADMMFitter().fit(problem)
+    def generate(
+        self, n_train: int, n_test: int
+    ) -> Tuple[
+        dd.dataframe.DataFrame,
+        dd.dataframe.Series,
+        dd.dataframe.DataFrame,
+        dd.dataframe.Series,
+        pd.DataFrame,
+    ]:
+        theta = self.get_theta()
+        df_train, y_train = self.generate_df_y(n=n_train, theta=theta)
+        df_test, y_test = self.generate_df_y(n=n_test, theta=theta)
+        return df_test, y_train, df_test, y_test, theta

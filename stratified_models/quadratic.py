@@ -30,12 +30,16 @@ from stratified_models.linear_operator import (
 
 @dataclass
 class ExplicitQuadraticFunction:
+    """
+    x * (q * x) / 2 + (c * x) + d
+    """
+
     q: LinearOperator
     c: Array
     d: float
 
     def __call__(self, x: Array) -> float:
-        return float((x @ (self.q.matvec(x))) / 2 + x @ self.c + self.d / 2)
+        return float((x @ (self.q.matvec(x))) / 2 + x @ self.c + self.d)
 
     @classmethod
     def quadratic_form(cls, q: LinearOperator) -> ExplicitQuadraticFunction:
@@ -47,7 +51,7 @@ class ExplicitQuadraticFunction:
 
     @classmethod
     def sum(
-        cls, m: int, components: list[tuple[ExplicitQuadraticFunction, float]]
+        cls, m: int, components: tuple[tuple[ExplicitQuadraticFunction, float], ...]
     ) -> ExplicitQuadraticFunction:
         # todo: if empty return the zero quadratic
         q = []
@@ -58,7 +62,7 @@ class ExplicitQuadraticFunction:
             c += f.c * gamma
             d += f.d * gamma
         return ExplicitQuadraticFunction(
-            q=SumOfLinearOperators(q, m),
+            q=SumOfLinearOperators(tuple(q), m),
             c=c,
             d=d,
         )
