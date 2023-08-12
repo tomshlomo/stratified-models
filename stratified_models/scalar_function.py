@@ -2,8 +2,7 @@ from __future__ import annotations
 
 import string
 from dataclasses import dataclass
-from functools import cached_property
-from typing import Generic, Protocol, TypeVar, Union
+from typing import Generic, Optional, Protocol, TypeVar, Union
 
 import cvxpy as cp
 import numpy as np
@@ -35,7 +34,7 @@ X = TypeVar("X")
 
 class ProxableScalarFunction(ScalarFunction[X], Protocol):
     def prox(self, v: X, t: float) -> X:
-        pass
+        raise NotImplementedError
 
 
 @dataclass
@@ -51,7 +50,7 @@ class Zero(Generic[X], ProxableScalarFunction[X]):
 class SumOfSquares(ProxableScalarFunction[Array], QuadraticScalarFunction[Array]):
     """
     x |-> x'x/2
-    x in R^m
+    x in RefitDataType^m
     """
 
     shape: int | tuple[int, ...]
@@ -72,7 +71,7 @@ class SumOfSquares(ProxableScalarFunction[Array], QuadraticScalarFunction[Array]
         self,
         x: cp.Expression,  # type: ignore[name-defined]
     ) -> cp.Expression:  # type: ignore[name-defined]
-        return cp.sum_squares(x)  # type: ignore[attr-defined]
+        return cp.sum_squares(x) / 2  # type: ignore[attr-defined]
 
     def to_explicit_quadratic(self) -> ExplicitQuadraticFunction:
         m = int(np.prod(self.shape))
@@ -87,7 +86,7 @@ class SumOfSquares(ProxableScalarFunction[Array], QuadraticScalarFunction[Array]
 # class Affine(ProxableScalarFunction[Array], QuadraticScalarFunction[Array]):
 #     """
 #     x |-> c'x + d
-#     x in R^m
+#     x in RefitDataType^m
 #     """
 #     c: Array
 #     d: float
@@ -144,15 +143,32 @@ EinsumPath = list[Union[str, tuple[int, ...]]]
 
 
 @dataclass
+class _TensorQuadFormProxCache:
+    einsum_subscripts: str
+    einsum_path: EinsumPath
+    u: Array
+    d: Array
+
+
+@dataclass
+class _TensorQuadFormCallCache:
+    einsum_subscripts: str
+    einsum_path: EinsumPath
+
+
+@dataclass
 class TensorQuadForm(QuadraticScalarFunction[Array], ProxableScalarFunction[Array]):
     axis: int
     dims: tuple[int, ...]
     a: npt.NDArray[
         np.float64
     ]  # todo: could also be a pydata.sparse array, which also supports tensordot
+    _call_cache: Optional[_TensorQuadFormCallCache] = None
+    _prox_cache: Optional[_TensorQuadFormProxCache] = None
 
-    @cached_property
-    def call_einsum_args(self) -> tuple[str, EinsumPath]:
+    def _set_call_einsum_args_cache(self) -> _TensorQuadFormCallCache:
+        if self._call_cache:
+            return self._call_cache
         all_letters = string.ascii_letters
         summation_index1 = all_letters[-1]
         summation_index2 = all_letters[self.axis]
@@ -163,24 +179,48 @@ class TensorQuadForm(QuadraticScalarFunction[Array], ProxableScalarFunction[Arra
 
         x = np.empty(self.dims, dtype=self.a.dtype)
         path, path_str = np.einsum_path(subscripts, x, self.a, x, optimize="optimal")
-        return subscripts, path
+        self._call_cache = _TensorQuadFormCallCache(
+            einsum_subscripts=subscripts, einsum_path=path
+        )
+        return self._call_cache
 
-    @cached_property
-    def prox_einsum_args(self) -> tuple[str, EinsumPath]:
+    def _set_prox_cache(self) -> _TensorQuadFormProxCache:
+        if self._prox_cache:
+            return self._prox_cache
+        einsum_subscripts, einsum_path = self._prox_einsum_args()
+        d, u = np.linalg.eigh(self.a)
+        self._prox_cache = _TensorQuadFormProxCache(
+            einsum_path=einsum_path,
+            einsum_subscripts=einsum_subscripts,
+            d=d,
+            u=u,
+        )
+        return self._prox_cache
+
+    def _prox_einsum_args(self) -> tuple[str, EinsumPath]:
         all_letters = string.ascii_letters
         summation_index1 = all_letters[-1]
         summation_index2 = all_letters[self.axis]
+        eig_index = all_letters[-2]
         x2_subs = all_letters[: len(self.dims)]
-        a_subs = summation_index1 + summation_index2
+        a_subs = (
+            "nm,m,km".replace("n", summation_index1)
+            .replace("k", summation_index2)
+            .replace("m", eig_index)
+        )
         out_subs = x2_subs.replace(summation_index2, summation_index1)
         subscripts = f"{a_subs},{x2_subs}->{out_subs}"
 
         x = np.empty(self.dims, dtype=self.a.dtype)
-        path, path_str = np.einsum_path(subscripts, self.a, x, optimize="optimal")
+        u = np.empty(self.a.shape, dtype=self.a.dtype)
+        w = np.empty(self.a.shape[0], dtype=self.a.dtype)
+        path, path_str = np.einsum_path(subscripts, u, w, u, x, optimize="optimal")
         return subscripts, path
 
     def __call__(self, x: Array) -> float:
-        subscripts, path = self.call_einsum_args
+        cache = self._set_call_einsum_args_cache()
+        subscripts = cache.einsum_subscripts
+        path = cache.einsum_path
         out = np.einsum(subscripts, x, self.a, x, optimize=path)
         return float(out) / 2
 
@@ -190,13 +230,27 @@ class TensorQuadForm(QuadraticScalarFunction[Array], ProxableScalarFunction[Arra
         t a x + (x - v) = 0
         (ta + I) x = v
         x = (ta + I)^-1 v
-        :param v:
-        :param t:
-        :return:
+
+        let a = udu' be the eigen decomposition
+        so:
+        x = uwu'v
+        where w = (td + I)^-1
         """
-        p = np.linalg.inv(t * self.a + np.eye(self.a.shape[0]))
-        subscripts, path = self.prox_einsum_args
-        return np.einsum(subscripts, p, v, optimize=path)  # type: ignore[no-any-return]
+        cache = self._set_prox_cache()
+        u = cache.u
+        d = cache.d
+        einsum_subscripts = cache.einsum_subscripts
+        einsum_path = cache.einsum_path
+
+        w = 1 / (t * d + 1)
+        return np.einsum(  # type: ignore[no-any-return]
+            einsum_subscripts,
+            u,
+            w,
+            u,
+            v,
+            optimize=einsum_path,
+        )
 
     def to_explicit_quadratic(self) -> ExplicitQuadraticFunction:
         return ExplicitQuadraticFunction.quadratic_form(
@@ -212,4 +266,9 @@ class TensorQuadForm(QuadraticScalarFunction[Array], ProxableScalarFunction[Arra
         x: cp.Expression,  # type: ignore[name-defined]
     ) -> cp.Expression:  # type: ignore[name-defined]
         q = self.to_explicit_quadratic().q.as_sparse_matrix()
-        return cp.quad_form(x, q, assume_PSD=True) / 2  # type: ignore[attr-defined]
+        expression = cp.quad_form(  # type: ignore[attr-defined]
+            x.flatten(order="C"),
+            q,
+            assume_PSD=True,
+        )
+        return expression / 2

@@ -140,7 +140,7 @@ class Identity(LinearOperator):
 
 @dataclass
 class SumOfLinearOperators(LinearOperator):
-    components: list[tuple[LinearOperator, float]]
+    components: tuple[tuple[LinearOperator, float], ...]
     m: int
 
     def size(self) -> int:

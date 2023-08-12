@@ -3,3 +3,4 @@ select = C,E,F,W
 max-complexity = 10
 application-import-names = stratified_models
 max-line-length = 88
+extend-ignore = E203,W503

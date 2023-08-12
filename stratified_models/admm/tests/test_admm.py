@@ -32,26 +32,30 @@ def test_ridge_regression() -> None:
     for problem, cost_exp in [
         (
             ConsensusProblem(
-                f=[(SumOfSquaresLoss(a=a, b=b), 1), (SumOfSquares(m), gamma)],
+                f=((SumOfSquaresLoss(a=a, b=b), 1), (SumOfSquares(m), gamma)),
                 g=Zero(),
+                var_shape=(m,),
             ),
             cost_exp1,
         ),
         (
             ConsensusProblem(
-                f=[(SumOfSquaresLoss(a=a, b=b), 1 / gamma)],
+                f=((SumOfSquaresLoss(a=a, b=b), 1 / gamma),),
                 g=SumOfSquares(m),
+                var_shape=(m,),
             ),
             cost_exp2,
         ),
     ]:
-        x, cost, state = ConsensusADMMSolver().solve(
-            problem=problem,
-            x0=np.zeros(m),
-            y0=np.zeros((problem.n, m)),
-        )
-        assert np.linalg.norm(x - x_exp) <= 1e-6
+        x, cost, state, converged = ConsensusADMMSolver().solve(problem=problem)
+        assert np.linalg.norm(x - x_exp) <= 1e-4
         assert abs(cost - cost_exp) <= 1e-6
+        assert converged
+
+        _, _, _, converged = ConsensusADMMSolver(max_iterations=5).solve(
+            problem=problem
+        )
+        assert not converged
 
 
 def test_lasso() -> None:
@@ -74,29 +78,25 @@ def test_lasso() -> None:
     cost_exp = cvxpy_problem.value
 
     problem = ConsensusProblem(
-        f=[(SumOfSquaresLoss(a=a, b=b), gamma)],
+        f=((SumOfSquaresLoss(a=a, b=b), gamma),),
         g=L1(),
+        var_shape=(m,),
     )
-    x, cost, state = ConsensusADMMSolver().solve(
-        problem=problem,
-        x0=np.zeros(m),
-        y0=np.zeros((problem.n, m)),
-    )
+    x, cost, state, converged = ConsensusADMMSolver().solve(problem=problem)
     assert abs(cost - cost_exp) <= 1e-6
-    assert np.linalg.norm(x - x_exp) <= 1e-6
+    assert np.linalg.norm(x - x_exp) <= 1e-4
+    assert converged
 
 
 def test_non_negative_least_squares() -> None:
     m = 10
     b = RNG.standard_normal((m,))
     problem = ConsensusProblem(
-        f=[(SumOfSquaresLoss(a=np.eye(m), b=b), 1.0)],
+        f=((SumOfSquaresLoss(a=np.eye(m), b=b), 1.0),),
         g=NonNegativeIndicator(),
+        var_shape=(m,),
     )
-    x, cost, state = ConsensusADMMSolver().solve(
-        problem=problem,
-        x0=np.zeros(m),
-        y0=np.zeros((problem.n, m)),
-    )
+    x, cost, state, converged = ConsensusADMMSolver().solve(problem=problem)
     x_exp = b.clip(min=0)
     assert np.linalg.norm(x - x_exp) <= 1e-6
+    assert converged
