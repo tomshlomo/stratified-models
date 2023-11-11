@@ -31,7 +31,7 @@ class StratifiedLinearRegressionProblem(Generic[F]):
 
     @property
     def n(self) -> int:
-        return self.x.shape[0]
+        return self.x.shape[0]  # type:ignore[no-any-return]
 
     @property
     def stratification_features(self) -> list[Hashable]:

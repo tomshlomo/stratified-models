@@ -76,7 +76,7 @@ def test_get_loss(n: int, k1: int, k2: int, max_rank: int) -> None:
     assert val == 0.0
 
 
-def test_separable_proxable_scalar_function():
+def test_separable_proxable_scalar_function() -> None:
     x = np.arange(3 * 4 * 5).reshape((3, 4, 5)).astype(float)
     func = SeparableProxableScalarFunction(
         items=[

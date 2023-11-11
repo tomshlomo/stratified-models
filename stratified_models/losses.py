@@ -48,7 +48,7 @@ def _to_numpy_array(x: Union[Array, scipy.sparse.spmatrix]) -> Array:
 
 
 @dataclass
-class SumOfSquaresLoss(QuadraticScalarFunction[Array], ProxableScalarFunction[Array]):
+class SumOfSquaresLoss(ProxableScalarFunction[Array], QuadraticScalarFunction[Array]):
     a: DenseOrSparseMatrix
     b: Array
     _prox_cache: Optional[SumOfSquaresProxCache] = None
