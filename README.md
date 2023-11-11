@@ -22,7 +22,7 @@ A work in progress.
 * replace pandas with dask/polars
 * replace numpy with dask arrays/jax/torch
 * implement a multi-threaded/processing version of ADMM (rust or dask?)
-* implement prox of graph and path graphs using FFT
+* implement prox of circle graph and path graphs using FFT
 
 
 ### Usability:
@@ -38,6 +38,7 @@ A work in progress.
   * svm? (would require to compute the prox for the hinge loss)
 * integration with optuna for hyperparameter optimization out of the box
 * util for featureless prediction (non parametric)
+* construct arbitrary regularization graphs without networkx
 
 ### Algorithms:
 * a score function that approximates the leave one out cross validation, or SURE. relevant papers:
@@ -48,7 +49,6 @@ Tune Hyperparameters](https://arxiv.org/pdf/2011.10218.pdf)
   * [Approximate Leave-One-Out for High-Dimensional
 Non-Differentiable Learning Problems](https://arxiv.org/pdf/1810.02716.pdf)
 * more losses:
-  * logistic
   * poisson negative log likelihood
   * hinge
   * huber
@@ -65,7 +65,9 @@ Regularized Stratified Models](https://arxiv.org/pdf/2305.02573.pdf)
 * smart initialization strategies:
   * no stratification
   * no stratification, then train a strat model using only the prediction
-
+* FFT for fast circle graph prox
+* DCT for fact path graph prox
+* look into fast algorithms for fast tree graph proxes
 
 ### Tests:
 * no regularization

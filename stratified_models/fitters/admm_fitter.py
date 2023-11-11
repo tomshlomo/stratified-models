@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-import time
 from dataclasses import dataclass, field
-from typing import Hashable, Iterable
+from math import ceil
 
 import numpy as np
 import scipy
@@ -10,7 +9,12 @@ import scipy
 from stratified_models.admm.admm import ADMMState, ConsensusADMMSolver, ConsensusProblem
 from stratified_models.fitters.fitter import Fitter, ProblemUpdate, RefitDataBase
 from stratified_models.problem import StratifiedLinearRegressionProblem, Theta
-from stratified_models.scalar_function import Array, ProxableScalarFunction, Zero
+from stratified_models.scalar_function import (
+    Array,
+    IntArray,
+    ProxableScalarFunction,
+    Zero,
+)
 
 """
 cost(theta) = sum_k f_k(theta_k) + laplacian(theta)
@@ -98,6 +102,7 @@ class ADMMRefitData(RefitDataBase[ProxableScalarFunction[Array]]):
 class ADMMFitter(Fitter[ProxableScalarFunction[Array], ADMMRefitData]):
     solver: ConsensusADMMSolver = field(default_factory=ConsensusADMMSolver)
     max_refit_data_size: int = 10  # todo: increase
+    max_rank: int = 1024
 
     def refit(
         self,
@@ -192,105 +197,59 @@ class ADMMFitter(Fitter[ProxableScalarFunction[Array], ADMMRefitData]):
             var_shape=problem.theta_shape(),
         )
 
-    def _get_node_clusters(
+    def _get_loss(
         self,
         problem: StratifiedLinearRegressionProblem[ProxableScalarFunction[Array]],
-    ) -> Iterable[NodesCluster]:
-        rows_so_far = 0
-        cols_so_far = 0
-        max_rank = max(1024, problem.m)
-        cluster = NodesCluster.empty()
-        for node, x_slice, _ in problem.node_data_iter():
-            size = x_slice.shape[0]
-            if min(rows_so_far + size, cols_so_far + problem.m) > max_rank:
-                yield cluster
-                rows_so_far = 0
-                cols_so_far = 0
-                cluster = NodesCluster.empty()
-            rows_so_far += size
-            cols_so_far += problem.m
-            cluster.nodes.append(node)
-            cluster.x_slices.append(x_slice[problem.regression_features].values)
-            cluster.y_slices.append(problem.y[x_slice.index].values)
-        if not cluster.is_empty:
-            yield cluster
+    ) -> SeparableProxableScalarFunction:
+        z = problem.x[problem.stratification_features]
+        nodes, node_index = np.unique(z, axis=0, return_inverse=True)
+        ravelled_nodes = np.ravel_multi_index(nodes.T, dims=problem.theta_shape()[:-1])
+        num_of_nodes = nodes.shape[0]
 
-    def _get_loss(
-        self, problem: StratifiedLinearRegressionProblem[ProxableScalarFunction[Array]]
-    ) -> LossForADMM:
-        print("starting ADMMFitter._get_loss()")
-        start = time.time()
+        max_rank = max(self.max_rank, problem.m)
+        max_nodes_per_cluster = min(max_rank // problem.m, num_of_nodes)
+        num_of_clusters = ceil(num_of_nodes / max_nodes_per_cluster)
+
+        shape = (problem.n, max_nodes_per_cluster * problem.m)
+        data = problem.x[problem.regression_features].values.flatten()
+        indices = np.add.outer(
+            np.mod(node_index, max_nodes_per_cluster) * problem.m, np.arange(problem.m)
+        ).flatten()
+        cluster_index = node_index // max_nodes_per_cluster
+        indptr = np.arange(0, (problem.n + 1) * problem.m, problem.m)
+        x = scipy.sparse.csr_matrix((data, indices, indptr), shape=shape)
         losses = []
-        for nodes_cluster in self._get_node_clusters(problem):
-            loss = problem.loss_factory.build_loss_function(
-                x=scipy.sparse.block_diag(nodes_cluster.x_slices),
-                y=np.concatenate(nodes_cluster.y_slices),
+        for i in range(num_of_clusters):
+            rows = cluster_index == i
+            cluster_nodes_indices = ravelled_nodes[
+                i * max_nodes_per_cluster : (i + 1) * max_nodes_per_cluster
+            ]
+            cluster_size = cluster_nodes_indices.shape[0]
+            x_ = x[rows, :]
+            if cluster_size < max_nodes_per_cluster:
+                x_ = x_[:, : cluster_size * problem.m]
+            cluster_loss = problem.loss_factory.build_loss_function(
+                x=x_,
+                y=problem.y[rows],
             )
-            losses.append(
-                NodesClusterLossData(
-                    nodes_indices=[
-                        problem.get_node_index(node) for node in nodes_cluster.nodes
-                    ],
-                    loss=loss,
-                )
-            )
-        print(f"  building loss took {time.time() - start} seconds")
-        return LossForADMM(losses=losses)
+            losses.append((cluster_nodes_indices, cluster_loss))
+        return SeparableProxableScalarFunction(items=losses)
 
 
 @dataclass
-class NodesCluster:
-    nodes: list[tuple[Hashable, ...]]
-    x_slices: list[Array]
-    y_slices: list[Array]
-
-    @classmethod
-    def empty(cls) -> NodesCluster:
-        return NodesCluster(
-            nodes=[],
-            x_slices=[],
-            y_slices=[],
-        )
-
-    @property
-    def is_empty(self) -> bool:
-        return not self.nodes
-
-
-@dataclass
-class NodesClusterLossData:
-    nodes_indices: list[tuple[int, ...]]
-    loss: ProxableScalarFunction[Array]
-
-    @property
-    def size(self) -> int:
-        return len(self.nodes_indices)
-
-
-@dataclass
-class LossForADMM(ProxableScalarFunction[Array]):
-    losses: list[NodesClusterLossData]
-
-    @staticmethod
-    def _concatenate_variables_cluster(
-        x: Array, cluster: NodesClusterLossData
-    ) -> Array:
-        return np.concatenate([x[index] for index in cluster.nodes_indices])
+class SeparableProxableScalarFunction(ProxableScalarFunction[Array]):
+    items: list[tuple[IntArray, ProxableScalarFunction[Array]]]
 
     def __call__(self, x: Array) -> float:
-        return sum(
-            loss_data.loss(self._concatenate_variables_cluster(x, loss_data))
-            for loss_data in self.losses
-        )
+        x = x.reshape((-1, x.shape[-1]))
+        return sum(func(x[index].flatten()) for index, func in self.items)
 
     def prox(self, v: Array, t: float) -> Array:
+        orig_shape = v.shape
+        v = v.reshape((-1, v.shape[-1]))
         x = v.copy()
-        for loss_data in self.losses:
-            x_local = loss_data.loss.prox(
-                v=self._concatenate_variables_cluster(v, loss_data),
-                t=t,
-            )
-            x_local = x_local.reshape((loss_data.size, -1))
-            for i, x_node in zip(loss_data.nodes_indices, x_local):
-                x[i] = x_node
-        return x
+        for index, func in self.items:
+            x_local = func.prox(v=v[index].flatten(), t=t)
+            x[index] = x_local.reshape((-1, v.shape[-1]))
+            pass
+        return x.reshape(orig_shape)

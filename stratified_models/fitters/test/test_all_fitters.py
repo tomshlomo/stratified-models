@@ -68,13 +68,10 @@ params = [
     (1e-10, 1e-10, 1e10, [0, 0, 0, 0, 0, 0]),
 ]
 fitters = [
-    CVXPYFitter(),
-    QuadraticProblemFitter(solver=DirectSolver()),
     ADMMFitter(),
+    QuadraticProblemFitter(solver=DirectSolver()),
+    CVXPYFitter(),
     QuadraticProblemFitter(solver=CGSolver()),
-    # DirectFitter(),
-    # ADMMFitter2(),
-    # CGFitter(),
 ]
 
 
@@ -94,8 +91,6 @@ def test_fit(
     theta, _, cost = fitter.fit(problem)
     cost_exp1 = problem.cost(theta)
     assert abs(cost - cost_exp1) <= 1e-3 * cost_exp1 + 1e-6
-    # costs_exp = Costs.from_problem_and_theta(problem, theta)
-    # assert abs(cost - costs_exp.total()) < costs_exp.total() * 1e-3
     if theta_exp:
         theta_exp_df = pd.DataFrame(
             np.tile(theta_exp, (m, 1)),
@@ -134,8 +129,6 @@ def test_refit(
     cost_exp1 = new_problem.cost(theta)
     assert abs(cost - cost_exp1) <= 1e-3 * cost_exp1 + 1e-6
 
-    # costs_exp = Costs.from_problem_and_theta(problem, theta)
-    # assert abs(cost - costs_exp.total()) < costs_exp.total() * 1e-3
     if theta_exp:
         theta_exp_df = pd.DataFrame(
             np.tile(theta_exp, (m, 1)),
@@ -150,23 +143,6 @@ def test_refit(
         ).all().all()
 
 
-# @pytest.mark.parametrize(
-#     ("reg1", "reg2", "l2reg"),
-#     [(1, 1, 1), (1, 10, 100), (1, 100, 10)],
-# )
-# def test_concensus(
-#     reg1: float,
-#     reg2: float,
-#     l2reg: float,
-# ) -> None:
-#     problem = get_problem(reg1=reg1, reg2=reg2, m=2, n=3, l2_reg=l2reg)
-#     theta, cost = fitters[0].fit(problem)
-#     for fitter in fitters[1:]:
-#         theta_tmp, cost_tmp = fitter.fit(problem)
-#         assert (np.abs(theta.df.values - theta_tmp.df.values) < 1e-3).all()
-#         assert abs(cost - cost_tmp) < 1e-3 * cost
-
-
 def get_problem_single_graph(
     laplace_reg: float,
     l2_reg: float,
@@ -174,13 +150,6 @@ def get_problem_single_graph(
     n: int,
 ) -> StratifiedLinearRegressionProblem[QuadraticScalarFunction[Array]]:
     graph = NetworkXRegularizationGraph(nx.path_graph(3), "z")
-    # nx.set_edge_attributes(
-    #     graph1, 1.0, NetworkXRegularizationGraph.LAPLACE_REG_PARAM_KEY
-    # )
-    # nx.set_edge_attributes(
-    #     graph2, 1.0, NetworkXRegularizationGraph.LAPLACE_REG_PARAM_KEY
-    # )
-
     x = (
         np.power.outer(np.arange(n), np.arange(m))
         if m > 1
@@ -229,8 +198,6 @@ def test_fit_single_graph(
     theta, _, cost = fitter.fit(problem)
     cost_exp1 = problem.cost(theta)
     assert abs(cost - cost_exp1) <= 1e-3 * cost_exp1 + 1e-6
-    # costs_exp = Costs.from_problem_and_theta(problem, theta)
-    # assert abs(cost - costs_exp.total()) < costs_exp.total() * 1e-3
     if theta_exp:
         theta_exp_df = pd.DataFrame(
             np.tile(theta_exp, (m, 1)),

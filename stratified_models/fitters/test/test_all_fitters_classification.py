@@ -14,11 +14,7 @@ from stratified_models.regularization_graph.networkx_graph import (
     NetworkXRegularizationGraph,
 )
 from stratified_models.regularizers import SumOfSquaresRegularizerFactory
-from stratified_models.scalar_function import (
-    Array,
-    ProxableScalarFunction,
-    ScalarFunction,
-)
+from stratified_models.scalar_function import Array, ProxableScalarFunction
 
 
 def get_problem(
@@ -89,7 +85,7 @@ fitters = [
     [(fitter, *p) for fitter, p in product(fitters, params)],
 )
 def test_fit(
-    fitter: Fitter[ScalarFunction[Array], RefitDataType],
+    fitter: Fitter[ProxableScalarFunction[Array], RefitDataType],
     reg1: float,
     reg2: float,
     l2_reg: float,

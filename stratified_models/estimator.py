@@ -164,16 +164,7 @@ class StratifiedLinearEstimator(Generic[F, RefitDataType]):
         return [graph.name() for graph, _ in self.graphs]
 
     def predict(self, X: pd.DataFrame) -> pd.Series:
-        rows = pd.MultiIndex.from_arrays(
-            X.loc[:, self.stratification_features()].values.T
-        )
-        theta_aligned = self.theta_.df.loc[rows, :]
-        y = np.einsum(
-            "nm,nm->n",
-            X.loc[:, self.regression_features].values,
-            theta_aligned.values,
-        )
-        return pd.Series(y, index=X.index)
+        return self.theta_.predict(X)
 
     @classmethod
     def make_ridge(
@@ -216,7 +207,7 @@ class StratifiedLogisticRegressionClassifier(Generic[F, RefitDataType]):
         self.estimator: StratifiedLinearEstimator[
             F, RefitDataType
         ] = StratifiedLinearEstimator(
-            loss_factory=LogisticLossFactory(),
+            loss_factory=LogisticLossFactory(),  # type: ignore[arg-type] # todo: fix
             regularizers_factories=regularizers_factories,
             graphs=graphs,
             regression_features=regression_features,
@@ -237,4 +228,6 @@ class StratifiedLogisticRegressionClassifier(Generic[F, RefitDataType]):
         return scipy.special.expit(log_odds)
 
     def predict(self, X: pd.DataFrame) -> pd.Series:
-        return np.sign(self.estimator.predict(X))
+        y = np.sign(self.estimator.predict(X)).astype(int)
+        y[y == 0] = 1  # todo: is there a better way?
+        return y

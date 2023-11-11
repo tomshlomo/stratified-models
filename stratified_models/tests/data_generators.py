@@ -87,4 +87,4 @@ class DataGenerator:
         theta = self.get_theta()
         df_train, y_train = self.generate_df_y(n=n_train, theta=theta)
         df_test, y_test = self.generate_df_y(n=n_test, theta=theta)
-        return df_test, y_train, df_test, y_test, theta
+        return df_train, y_train, df_test, y_test, theta

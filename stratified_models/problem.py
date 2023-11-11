@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Generic, Hashable, Iterable, TypeVar
+from typing import Generic, Hashable, Iterable, Sequence, TypeVar
 
 import numpy as np
 import pandas as pd
@@ -28,6 +28,10 @@ class StratifiedLinearRegressionProblem(Generic[F]):
     @property
     def m(self) -> int:
         return len(self.regression_features)
+
+    @property
+    def n(self) -> int:
+        return self.x.shape[0]
 
     @property
     def stratification_features(self) -> list[Hashable]:
@@ -122,6 +126,24 @@ class Theta:
     ) -> Theta:
         df = cls._get_df_from_array(arr=arr, problem=problem)
         return Theta(df=df, shape=problem.theta_shape())
+
+    def stratification_features(self) -> Sequence[Hashable]:
+        return self.df.index.names  # type:ignore[no-any-return]
+
+    def regression_features(self) -> pd.Index:
+        return self.df.columns
+
+    def predict(self, x: pd.DataFrame) -> pd.Series:
+        rows = pd.MultiIndex.from_arrays(
+            x.loc[:, self.stratification_features()].values.T
+        )
+        theta_aligned = self.df.loc[rows, :]
+        y = np.einsum(
+            "nm,nm->n",
+            x.loc[:, self.regression_features()].values,
+            theta_aligned.values,
+        )
+        return pd.Series(y, index=x.index)
 
     # def get_local(self, index: tuple[Hashable, ...]) -> pd.DataFrame:
     #     return self.df.xs(key=index, axis=0)

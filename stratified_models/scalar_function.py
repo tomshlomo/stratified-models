@@ -13,6 +13,7 @@ from stratified_models.quadratic import ExplicitQuadraticFunction
 
 T = TypeVar("T", contravariant=True)
 Array = npt.NDArray[np.float64]
+IntArray = npt.NDArray[np.int_]
 
 
 class ScalarFunction(Protocol[T]):
