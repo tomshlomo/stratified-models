@@ -230,6 +230,7 @@ class LogisticLossFactory(LossFactory[LogisticOverLinear]):
     def build_loss_function(
         self, x: DenseOrSparseMatrix, y: Array
     ) -> LogisticOverLinear:
+        y = y * 2 - 1  # from {0,1} to {-1,1}
         y = -y[:, np.newaxis]
         a = x.multiply(y) if isinstance(x, scipy.sparse.spmatrix) else x * y
         return LogisticOverLinear(a=a)

@@ -198,13 +198,12 @@ def test_fit_single_graph(
     theta, _, cost = fitter.fit(problem)
     cost_exp1 = problem.cost(theta)
     assert abs(cost - cost_exp1) <= 1e-3 * cost_exp1 + 1e-6
-    if theta_exp:
-        theta_exp_df = pd.DataFrame(
-            np.tile(theta_exp, (m, 1)),
-            index=problem.regression_features,
-        ).T
-        theta_exp_df.index.name = "z"
-        cost_exp2 = problem.cost(Theta(theta_exp_df, shape=problem.theta_shape()))
-        assert (abs(cost - cost_exp2) <= 1e-3 * cost_exp2 + 1e-6) or (
-            (theta.df - theta_exp_df).abs() < 1e-3
-        ).all().all()
+    theta_exp_df = pd.DataFrame(
+        np.tile(theta_exp, (m, 1)),
+        index=problem.regression_features,
+    ).T
+    theta_exp_df.index.name = "z"
+    cost_exp2 = problem.cost(Theta(theta_exp_df, shape=problem.theta_shape()))
+    assert (abs(cost - cost_exp2) <= 1e-3 * cost_exp2 + 1e-6) or (
+        (theta.df - theta_exp_df).abs() < 1e-3
+    ).all().all()

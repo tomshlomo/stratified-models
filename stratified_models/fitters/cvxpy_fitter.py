@@ -32,9 +32,10 @@ class CVXPYFitter(Fitter[CVXPYScalarFunction, CVXPYRefitData]):
     def fit(
         self, problem: StratifiedLinearRegressionProblem[CVXPYScalarFunction]
     ) -> tuple[Theta, CVXPYRefitData, float]:
-        cvxpy_problem, theta_vars, refit_data = self._build_cvxpy_problem(problem)
+        cvxpy_problem, theta_vars, refit_data, loss = self._build_cvxpy_problem(problem)
         # todo: verbose flag, select solver
         cvxpy_problem.solve(verbose=True)  # type:ignore[no-untyped-call]
+        print(f"{loss.value / problem.n=}")
         return (
             Theta.from_array(arr=theta_vars.value, problem=problem),
             refit_data,
@@ -86,6 +87,7 @@ class CVXPYFitter(Fitter[CVXPYScalarFunction, CVXPYRefitData]):
                 laplace_params=laplace_params,
                 theta_vars=theta,
             ),
+            loss,
         )
 
     def _get_local_reg(

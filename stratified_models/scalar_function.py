@@ -128,6 +128,8 @@ class L1:
         t + x - v = 0
         x = v - t
         """
+        if t == 0.0:
+            return v
         return soft_threshold(v, t)
 
 
@@ -237,6 +239,8 @@ class TensorQuadForm(QuadraticScalarFunction[Array], ProxableScalarFunction[Arra
         x = uwu'v
         where w = (td + I)^-1
         """
+        if t == 0.0:
+            return v
         cache = self._set_prox_cache()
         u = cache.u
         d = cache.d

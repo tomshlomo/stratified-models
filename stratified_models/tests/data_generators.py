@@ -23,6 +23,8 @@ class DataGenerator:
     )
     smoothing_iters: int = 20
     sigma: float = 1e-1
+    theta_cardinality: int = 10
+    sign: bool = False
 
     def regression_features(self) -> list[str]:
         return [f"x_{i}" for i in range(self.m)]
@@ -35,6 +37,9 @@ class DataGenerator:
         k = int(np.prod(k_list))
         regression_cols = self.regression_features()
         theta = RNG.standard_normal((k, self.m))
+        if self.theta_cardinality < self.m:
+            s = RNG.choice(np.arange(self.m), self.m - self.theta_cardinality)
+            theta[:, s] = 0.0
         for graph, weight in self.graphs:
             nx.set_edge_attributes(graph, weight, "weight")
         graph = cartesian_product(graph for graph, _ in self.graphs)
@@ -43,6 +48,7 @@ class DataGenerator:
         a = scipy.sparse.diags(1 / a.sum(axis=0).A.ravel()) * a
         for _ in range(self.smoothing_iters):
             theta = a @ theta
+
         return pd.DataFrame(
             theta,
             index=pd.MultiIndex.from_tuples(graph.nodes),
@@ -62,6 +68,8 @@ class DataGenerator:
             axis=1
         )
         y += RNG.standard_normal(y.shape[0]) * self.sigma
+        if self.sign:
+            y = np.sign(y)
         return y
 
     def get_df(self, n: int) -> pd.DataFrame:

@@ -39,9 +39,12 @@ class StratifiedLinearRegressionProblem(Generic[F]):
 
     def loss_iter(self) -> Iterable[tuple[F, tuple[Hashable, ...]]]:
         for node, x, y in self.node_data_iter():
-            yield self.loss_factory.build_loss_function(
-                x[self.regression_features].values, y.values
-            ), node
+            yield (
+                self.loss_factory.build_loss_function(
+                    x[self.regression_features].values, y.values
+                ),
+                node,
+            )
 
     def node_data_iter(
         self,
@@ -51,7 +54,7 @@ class StratifiedLinearRegressionProblem(Generic[F]):
         ]:
             if not isinstance(node, tuple):
                 node = (node,)
-            yield node, x_slice, self.y.loc[x_slice.index]
+            yield node, x_slice, self.y[x_slice.index]
 
     def laplacians(self) -> Iterable[tuple[F, float]]:
         dims = self.theta_shape()

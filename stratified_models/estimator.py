@@ -223,11 +223,11 @@ class StratifiedLogisticRegressionClassifier(Generic[F, RefitDataType]):
         self.estimator = self.estimator.fit(X=X, y=y)
         return self
 
-    def predict_proba(self, X: pd.DataFrame) -> pd.Series:
+    def predict_proba(self, X: pd.DataFrame) -> Array:
         log_odds = self.estimator.predict(X)
-        return scipy.special.expit(log_odds)
+        p1 = scipy.special.expit(log_odds.values)[:, np.newaxis]
+        p0 = 1 - p1
+        return np.hstack([p0, p1])
 
     def predict(self, X: pd.DataFrame) -> pd.Series:
-        y = np.sign(self.estimator.predict(X)).astype(int)
-        y[y == 0] = 1  # todo: is there a better way?
-        return y
+        return self.estimator.predict(X) > 0
