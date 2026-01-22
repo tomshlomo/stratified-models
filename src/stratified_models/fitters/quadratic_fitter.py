@@ -3,7 +3,6 @@ from __future__ import annotations
 import itertools
 from abc import abstractmethod
 from dataclasses import dataclass
-from typing import Optional
 
 import scipy
 
@@ -20,7 +19,7 @@ class QuadraticRefitData(RefitDataBase[QuadraticScalarFunction[Array]]):
 
 @dataclass
 class QuadraticProblemFitter(
-    Fitter[QuadraticScalarFunction[Array], QuadraticRefitData]
+    Fitter[QuadraticScalarFunction[Array], QuadraticRefitData],
 ):
     solver: PSDSystemSolver
 
@@ -52,7 +51,7 @@ class QuadraticProblemFitter(
             problem_update=problem_update,
             refit_data=refit_data,
         )
-        # todo: pass previous solutions (and even factorizations to use as
+        # TODO: pass previous solutions (and even factorizations to use as
         #  preconditioners) to PSDSolver. implement a resolve in PSDSolver.
         theta = self.solver.solve(f)
         cost = f(theta)
@@ -71,7 +70,8 @@ class QuadraticProblemFitter(
         self,
         problem: StratifiedLinearRegressionProblem[QuadraticScalarFunction[Array]],
     ) -> tuple[
-        ExplicitQuadraticFunction, tuple[tuple[ExplicitQuadraticFunction, float], ...]
+        ExplicitQuadraticFunction,
+        tuple[tuple[ExplicitQuadraticFunction, float], ...],
     ]:
         k, m = problem.theta_flat_shape()
         cost_components = []
@@ -81,14 +81,15 @@ class QuadraticProblemFitter(
         for node, x, y in problem.node_data_iter():
             i = problem.get_node_flat_index(node)
             loss = problem.loss_factory.build_loss_function(
-                x[problem.regression_features].values, y.values
+                x[problem.regression_features].values,
+                y.values,
             ).to_explicit_quadratic()
             loss_components[i] = loss
         cost_components.append(
             (
                 ExplicitQuadraticFunction.concat(k, m, loss_components),
                 1.0,
-            )
+            ),
         )
 
         # local reg
@@ -128,6 +129,7 @@ class QuadraticProblemFitter(
                     problem_update.new_graph_gammas,
                 ),
                 refit_data.previous_quadratic_components,
+                strict=False,
             )
         )
         k, m = refit_data.previous_problem.theta_flat_shape()
@@ -154,18 +156,20 @@ class DirectSolver(PSDSystemSolver):
 
 @dataclass
 class CGSolver(PSDSystemSolver):
-    tol: float = 1e-6
-    max_iter: Optional[int] = None
+    atol: float = 1e-6
+    rtol: float = 1e-6
+    max_iter: int | None = None
 
     def solve(
         self,
         f: ExplicitQuadraticFunction,
     ) -> Array:
-        theta, info = scipy.sparse.linalg.cg(
+        theta, _info = scipy.sparse.linalg.cg(
             f.q.to_scipy_linear_operator(),
             -f.c,
-            tol=self.tol,
+            atol=self.atol,
+            rtol=self.rtol,
             maxiter=self.max_iter,
         )
-        # todo: raise error if info indicates a problem
+        # TODO: raise error if info indicates a problem
         return theta  # type: ignore[no-any-return]

@@ -23,7 +23,11 @@ from stratified_models.scalar_function import Array, QuadraticScalarFunction
 
 
 def get_problem(
-    reg1: float, reg2: float, l2_reg: float, m: int, n: int
+    reg1: float,
+    reg2: float,
+    l2_reg: float,
+    m: int,
+    n: int,
 ) -> StratifiedLinearRegressionProblem[QuadraticScalarFunction[Array]]:
     graph1 = NetworkXRegularizationGraph(nx.path_graph(2), "strat_0")
     graph2 = NetworkXRegularizationGraph(nx.path_graph(3), "strat_1")

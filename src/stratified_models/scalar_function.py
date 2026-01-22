@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import string
 from dataclasses import dataclass
-from typing import Generic, Optional, Protocol, TypeVar, Union
+from typing import Protocol, TypeVar
 
 import cvxpy as cp
 import numpy as np
@@ -22,9 +22,7 @@ class ScalarFunction(Protocol[T]):
 
 
 class QuadraticScalarFunction(ScalarFunction[T], Protocol):
-    """
-    f(x) = x' q x / 2 - c'x + d/2 for some psd matrix q, vector c, and scalar d
-    """
+    """f(x) = x' q x / 2 - c'x + d/2 for some psd matrix q, vector c, and scalar d."""
 
     def to_explicit_quadratic(self) -> ExplicitQuadraticFunction:
         raise NotImplementedError
@@ -39,7 +37,7 @@ class ProxableScalarFunction(ScalarFunction[X], Protocol):
 
 
 @dataclass
-class Zero(Generic[X], ProxableScalarFunction[X]):
+class Zero[X](ProxableScalarFunction[X]):
     def __call__(self, x: X) -> float:
         return 0.0
 
@@ -49,9 +47,8 @@ class Zero(Generic[X], ProxableScalarFunction[X]):
 
 @dataclass
 class SumOfSquares(ProxableScalarFunction[Array], QuadraticScalarFunction[Array]):
-    """
-    x |-> x'x/2
-    x in RefitDataType^m
+    """x |-> x'x/2
+    x in RefitDataType^m.
     """
 
     shape: int | tuple[int, ...]
@@ -60,11 +57,10 @@ class SumOfSquares(ProxableScalarFunction[Array], QuadraticScalarFunction[Array]
         return float((x.ravel() @ x.ravel()) / 2)
 
     def prox(self, v: Array, t: float) -> Array:
-        """
-        argmin |x|^2 /2 + |x - v|^2 /2t
+        """Argmin |x|^2 /2 + |x - v|^2 /2t
         x + (x - v)/t = 0
         tx + x = v
-        x = v/(1+t)
+        x = v/(1+t).
         """
         return v / (1 + t)
 
@@ -121,12 +117,11 @@ class L1:
         return float(np.sum(np.abs(x)))
 
     def prox(self, v: Array, t: float) -> Array:
-        """
-        argmin |x| + 1/2t |x - v|^2
+        """Argmin |x| + 1/2t |x - v|^2
         sign(x) + (x - v)/t = 0
         assume x is positive:
         t + x - v = 0
-        x = v - t
+        x = v - t.
         """
         if t == 0.0:
             return v
@@ -142,7 +137,7 @@ class NonNegativeIndicator:
         return np.clip(v, 0.0, None)
 
 
-EinsumPath = list[Union[str, tuple[int, ...]]]
+EinsumPath = list[str | tuple[int, ...]]
 
 
 @dataclass
@@ -165,9 +160,9 @@ class TensorQuadForm(QuadraticScalarFunction[Array], ProxableScalarFunction[Arra
     dims: tuple[int, ...]
     a: npt.NDArray[
         np.float64
-    ]  # todo: could also be a pydata.sparse array, which also supports tensordot
-    _call_cache: Optional[_TensorQuadFormCallCache] = None
-    _prox_cache: Optional[_TensorQuadFormProxCache] = None
+    ]  # TODO: could also be a pydata.sparse array, which also supports tensordot
+    _call_cache: _TensorQuadFormCallCache | None = None
+    _prox_cache: _TensorQuadFormProxCache | None = None
 
     def _set_call_einsum_args_cache(self) -> _TensorQuadFormCallCache:
         if self._call_cache:
@@ -181,9 +176,10 @@ class TensorQuadForm(QuadraticScalarFunction[Array], ProxableScalarFunction[Arra
         subscripts = f"{x1_subs},{a_subs},{x2_subs}"
 
         x = np.empty(self.dims, dtype=self.a.dtype)
-        path, path_str = np.einsum_path(subscripts, x, self.a, x, optimize="optimal")
+        path, _path_str = np.einsum_path(subscripts, x, self.a, x, optimize="optimal")
         self._call_cache = _TensorQuadFormCallCache(
-            einsum_subscripts=subscripts, einsum_path=path
+            einsum_subscripts=subscripts,
+            einsum_path=path,
         )
         return self._call_cache
 
@@ -217,7 +213,7 @@ class TensorQuadForm(QuadraticScalarFunction[Array], ProxableScalarFunction[Arra
         x = np.empty(self.dims, dtype=self.a.dtype)
         u = np.empty(self.a.shape, dtype=self.a.dtype)
         w = np.empty(self.a.shape[0], dtype=self.a.dtype)
-        path, path_str = np.einsum_path(subscripts, u, w, u, x, optimize="optimal")
+        path, _path_str = np.einsum_path(subscripts, u, w, u, x, optimize="optimal")
         return subscripts, path
 
     def __call__(self, x: Array) -> float:
@@ -228,11 +224,10 @@ class TensorQuadForm(QuadraticScalarFunction[Array], ProxableScalarFunction[Arra
         return float(out) / 2
 
     def prox(self, v: Array, t: float) -> Array:
-        """
-        argmin x' a x / 2 + |x - v|^2 / 2t
+        """Argmin x' a x / 2 + |x - v|^2 / 2t
         t a x + (x - v) = 0
         (ta + I) x = v
-        x = (ta + I)^-1 v
+        x = (ta + I)^-1 v.
 
         let a = udu' be the eigen decomposition
         so:
@@ -263,7 +258,7 @@ class TensorQuadForm(QuadraticScalarFunction[Array], ProxableScalarFunction[Arra
                 a=self.a,
                 axis=self.axis,
                 dims=self.dims,
-            )
+            ),
         )
 
     def cvxpy_expression(

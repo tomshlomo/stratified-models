@@ -1,5 +1,6 @@
+from collections.abc import Iterable
 from functools import reduce
-from typing import Any, Iterable
+from typing import Any
 
 import networkx as nx
 from networkx import Graph

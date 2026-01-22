@@ -11,7 +11,7 @@ class RefitDataBase(Generic[F]):
     previous_problem: StratifiedLinearRegressionProblem[F]
 
 
-# todo: fix this typing issue
+# TODO: fix this typing issue
 RefitDataType = TypeVar("RefitDataType", bound=RefitDataBase)  # type:ignore[type-arg]
 
 
@@ -20,10 +20,11 @@ class ProblemUpdate:
     new_regularization_gammas: list[float]
     new_graph_gammas: list[float]
 
-    # todo: new data? (x and y)
+    # TODO: new data? (x and y)
 
     def apply(
-        self, problem: StratifiedLinearRegressionProblem[F]
+        self,
+        problem: StratifiedLinearRegressionProblem[F],
     ) -> StratifiedLinearRegressionProblem[F]:
         return StratifiedLinearRegressionProblem(
             x=problem.x,
@@ -32,12 +33,16 @@ class ProblemUpdate:
             regularizers_factories=tuple(
                 (f, gamma)
                 for (f, _), gamma in zip(
-                    problem.regularizers_factories, self.new_regularization_gammas
+                    problem.regularizers_factories,
+                    self.new_regularization_gammas,
+                    strict=False,
                 )
             ),
             graphs=tuple(
                 (graph, gamma)
-                for (graph, _), gamma in zip(problem.graphs, self.new_graph_gammas)
+                for (graph, _), gamma in zip(
+                    problem.graphs, self.new_graph_gammas, strict=False,
+                )
             ),
             regression_features=problem.regression_features,
         )
@@ -58,10 +63,10 @@ class Fitter(Protocol[F, RefitDataType]):
         raise NotImplementedError
 
 
-# todo: wrong location
+# TODO: wrong location
 
 
-# todo: wrong location
+# TODO: wrong location
 
 
 # @dataclass

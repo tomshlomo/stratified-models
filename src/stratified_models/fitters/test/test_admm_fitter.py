@@ -38,7 +38,7 @@ def test_get_loss(n: int, k1: int, k2: int, max_rank: int) -> None:
                 "x2": 1 + x**2,
                 "z1": np.mod(x, k1).astype(int),
                 "z2": np.mod(x, k2).astype(int),
-            }
+            },
         )
         .sample(frac=1, random_state=42)
         .reset_index()
@@ -53,7 +53,7 @@ def test_get_loss(n: int, k1: int, k2: int, max_rank: int) -> None:
         x=df,
         y=y,
         loss_factory=SumOfSquaresLossFactory(),
-        regularizers_factories=tuple(),
+        regularizers_factories=(),
         graphs=(
             (NetworkXRegularizationGraph(graph=nx.path_graph(k1), name="z1"), 1.0),
             (NetworkXRegularizationGraph(graph=nx.path_graph(k2), name="z2"), 1.0),
@@ -83,7 +83,7 @@ def test_separable_proxable_scalar_function() -> None:
             (np.array([0, 6]), SumOfSquares(10)),  # [(0,0), (1,2)]
             (np.array([5, 11, 10]), L1()),  # [(1,1), (2,3), (2,2)]
             (np.array([1]), SumOfSquares(5)),  # [(0,1)]
-        ]
+        ],
     )
     out = func(x)
     expected_out = sum(

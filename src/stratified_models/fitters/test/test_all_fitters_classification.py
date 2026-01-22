@@ -23,12 +23,11 @@ def get_problem(
     l2_reg: float,
     n: int,
 ) -> StratifiedLinearRegressionProblem[ProxableScalarFunction[Array]]:
-    """
-    both       +---           +---       ][      +++-            +++-
+    """Both       +---           +---       ][      +++-            +++-
     group12    +---               ][             +++-
     group00                   +---               ][              +++-
               |    |    |    |    |    |    |    |    |    |    |    |
-              -6   -5   -4   -3   -2   -1   0    1    2    3    4    5
+              -6   -5   -4   -3   -2   -1   0    1    2    3    4    5.
     """
     graph1 = NetworkXRegularizationGraph(nx.path_graph(2), "strat_0")
     graph2 = NetworkXRegularizationGraph(nx.path_graph(3), "strat_1")

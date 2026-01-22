@@ -101,7 +101,7 @@ class ADMMRefitData(RefitDataBase[ProxableScalarFunction[Array]]):
 @dataclass(frozen=True)
 class ADMMFitter(Fitter[ProxableScalarFunction[Array], ADMMRefitData]):
     solver: ConsensusADMMSolver = field(default_factory=ConsensusADMMSolver)
-    max_refit_data_size: int = 10  # todo: increase
+    max_refit_data_size: int = 10  # TODO: increase
     max_rank: int = 1024
 
     def refit(
@@ -132,7 +132,7 @@ class ADMMFitter(Fitter[ProxableScalarFunction[Array], ADMMRefitData]):
         refit_data_in: ADMMRefitData,
         final_admm_state: ADMMState,
     ) -> ADMMRefitData:
-        previous_final_states = [final_admm_state] + refit_data_in.previous_final_states
+        previous_final_states = [final_admm_state, *refit_data_in.previous_final_states]
         if len(previous_final_states) > self.max_refit_data_size:
             previous_final_states = previous_final_states[: self.max_refit_data_size]
         return ADMMRefitData(
@@ -166,14 +166,16 @@ class ADMMFitter(Fitter[ProxableScalarFunction[Array], ADMMRefitData]):
         refit_data: ADMMRefitData,
     ) -> ConsensusProblem:
         previous_admm_problem = refit_data.previous_admm_problem
-        gammas = (
-            [1.0]
-            + problem_update.new_regularization_gammas
-            + problem_update.new_graph_gammas
-        )
+        gammas = [
+            1.0,
+            *problem_update.new_regularization_gammas,
+            *problem_update.new_graph_gammas,
+        ]
         f = [
             (func, gamma_new)
-            for gamma_new, (func, gamma_old) in zip(gammas, previous_admm_problem.f)
+            for gamma_new, (func, gamma_old) in zip(
+                gammas, previous_admm_problem.f, strict=False,
+            )
         ]
         g = previous_admm_problem.g
         return ConsensusProblem(
@@ -187,13 +189,13 @@ class ADMMFitter(Fitter[ProxableScalarFunction[Array], ADMMRefitData]):
         problem: StratifiedLinearRegressionProblem[ProxableScalarFunction[Array]],
     ) -> ConsensusProblem:
         f: list[tuple[ProxableScalarFunction[Array], float]] = [
-            (self._get_loss(problem), 1.0)
+            (self._get_loss(problem), 1.0),
         ]
         f.extend(problem.regularizers())
         f.extend(problem.laplacians())
         return ConsensusProblem(
             f=tuple(f),
-            g=Zero(),  # todo: enforce domain constraints?
+            g=Zero(),  # TODO: enforce domain constraints?
             var_shape=problem.theta_shape(),
         )
 
@@ -213,7 +215,8 @@ class ADMMFitter(Fitter[ProxableScalarFunction[Array], ADMMRefitData]):
         shape = (problem.n, max_nodes_per_cluster * problem.m)
         data = problem.x[problem.regression_features].values.flatten()
         indices = np.add.outer(
-            np.mod(node_index, max_nodes_per_cluster) * problem.m, np.arange(problem.m)
+            np.mod(node_index, max_nodes_per_cluster) * problem.m,
+            np.arange(problem.m),
         ).flatten()
         cluster_index = node_index // max_nodes_per_cluster
         indptr = np.arange(0, (problem.n + 1) * problem.m, problem.m)
@@ -251,5 +254,4 @@ class SeparableProxableScalarFunction(ProxableScalarFunction[Array]):
         for index, func in self.items:
             x_local = func.prox(v=v[index].flatten(), t=t)
             x[index] = x_local.reshape((-1, v.shape[-1]))
-            pass
         return x.reshape(orig_shape)

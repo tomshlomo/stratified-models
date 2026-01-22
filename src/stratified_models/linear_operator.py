@@ -17,7 +17,7 @@ class LinearOperator:
 
     @abstractmethod
     def matvec(self, x: Array) -> Array:
-        # todo: should also support matrix-matrix
+        # TODO: should also support matrix-matrix
         #  multiplication, or even a general tensor dot
         #  with a specified axis (which is defaulted to 0)
         raise NotImplementedError
@@ -39,7 +39,7 @@ class LinearOperator:
         return np.float64
 
 
-# todo: split to 2 classes: numpy, scipy sparse
+# TODO: split to 2 classes: numpy, scipy sparse
 @dataclass
 class MatrixBasedLinearOperator(LinearOperator):
     a: npt.NDArray[np.float64] | scipy.sparse.spmatrix
@@ -72,8 +72,8 @@ class RepeatedLinearOperator(LinearOperator):
     def matvec(self, x: Array) -> Array:
         xt = x.reshape((self.base_op.size(), -1), order="F")
         out = self.base_op.matvec(
-            xt
-        )  # todo: this assumes lin_op supports matmat which in practice is not true.
+            xt,
+        )  # TODO: this assumes lin_op supports matmat which in practice is not true.
         return out.reshape(x.shape, order="F")
         # return np.repeat(out, self.repetitions, axis=0)
 
@@ -147,9 +147,7 @@ class SumOfLinearOperators(LinearOperator):
         return self.m
 
     def matvec(self, x: Array) -> Array:
-        return sum(
-            op.matvec(x) * gamma for op, gamma in self.components
-        )  # type: ignore[return-value]
+        return sum(op.matvec(x) * gamma for op, gamma in self.components)  # type: ignore[return-value]
 
     def as_sparse_matrix(self) -> scipy.sparse.spmatrix:
         return sum(op.as_sparse_matrix() * gamma for op, gamma in self.components)
@@ -157,7 +155,7 @@ class SumOfLinearOperators(LinearOperator):
 
 @dataclass
 class FlattenedTensorDot(LinearOperator):
-    a: npt.NDArray[np.float64] | scipy.sparse.spmatrix  # todo: could also be a
+    a: npt.NDArray[np.float64] | scipy.sparse.spmatrix  # TODO: could also be a
     # pydata.sparse array, which also supports tensordot
     axis: int
     dims: tuple[int, ...]
@@ -167,7 +165,7 @@ class FlattenedTensorDot(LinearOperator):
 
     def matvec(self, x: Array) -> Array:
         x = x.reshape(self.dims)
-        # todo: these 2 lines can be replaced with an einsum (faster)
+        # TODO: these 2 lines can be replaced with an einsum (faster)
         ax = np.tensordot(self.a, x, axes=(1, self.axis))
         ax = ax.swapaxes(0, self.axis)
         return ax.ravel()

@@ -1,27 +1,21 @@
 from __future__ import annotations
 
-from itertools import product
-from typing import Any, Callable, Hashable, Optional, Self
-
 import networkx as nx
 import numpy as np
 import optuna
 import pandas as pd
-import scipy
 from numpy.typing import NDArray
 from optuna.visualization import plot_slice
 from sklearn import set_config
-from sklearn.base import BaseEstimator, TransformerMixin, clone
+from sklearn.base import BaseEstimator
 from sklearn.compose import ColumnTransformer
-from sklearn.linear_model import LogisticRegression, LogisticRegressionCV
+from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score, log_loss, roc_auc_score
 from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import FunctionTransformer, KBinsDiscretizer, StandardScaler
-from tqdm import tqdm
+from sklearn.preprocessing import FunctionTransformer, StandardScaler
 
 from stratified_models.estimator import StratifiedLogisticRegressionClassifier
-from stratified_models.fitters.admm_fitter import ADMMFitter
 from stratified_models.fitters.cvxpy_fitter import CVXPYFitter
 from stratified_models.regularization_graph.networkx_graph import (
     NetworkXRegularizationGraph,
@@ -41,9 +35,11 @@ X = df.drop(columns=["HeartDisease"])
 # categorical_features = X.select_dtypes('object').columns
 
 x_train, x_test, y_train, y_test = train_test_split(
-    X, y, test_size=0.15, random_state=42
+    X,
+    y,
+    test_size=0.15,
+    random_state=42,
 )
-print(f"{x_train.shape=}, {x_test.shape=}")
 
 
 def evaluate_model(model: BaseEstimator) -> None:
@@ -51,9 +47,9 @@ def evaluate_model(model: BaseEstimator) -> None:
     y_train_prob = model.predict_proba(x_train)[:, 1]
     y_train_bin = model.predict(x_train)
 
-    acc_train = accuracy_score(y_train, y_train_bin)
-    roc_train = roc_auc_score(y_train, y_train_prob)
-    ce_train = log_loss(y_train, y_train_prob)
+    accuracy_score(y_train, y_train_bin)
+    roc_auc_score(y_train, y_train_prob)
+    log_loss(y_train, y_train_prob)
 
     y_test_prob = model.predict_proba(x_test)[:, 1]
     y_test_bin = model.predict(x_test)
@@ -62,13 +58,10 @@ def evaluate_model(model: BaseEstimator) -> None:
     roc_test = roc_auc_score(y_test, y_test_prob)
     ce_test = log_loss(y_test, y_test_prob)
 
-    print(f"{acc_train=:.3f}, {acc_test=:.3f}")
-    print(f"{roc_train=:.3f}, {roc_test=:.3f}")
-    print(f"{ce_train=:.3f}, {ce_test=:.3f}")
     return acc_test, roc_test, ce_test
 
 
-def main():
+def main() -> None:
     features = [
         "one",
         "Sex_M",
@@ -101,7 +94,7 @@ def main():
                 ),
             ),
             ("linear", LogisticRegression(penalty=None, fit_intercept=False)),
-        ]
+        ],
     )
     evaluate_model(simple_linear)
 
@@ -118,7 +111,7 @@ def main():
                 ),
             ),
             ("linear", LogisticRegression(penalty=None, fit_intercept=True)),
-        ]
+        ],
     )
     evaluate_model(simple_linear)
 
@@ -129,7 +122,7 @@ def main():
         # beta = 0.0
         # n_bins = 2
         alpha = trial.suggest_float("alpha", 1e-9, 1e3, log=True)
-        beta = trial.suggest_float("beta", 1e-9, 1e3, log=True)
+        trial.suggest_float("beta", 1e-9, 1e3, log=True)
         gamma = trial.suggest_float("gamma", 1e-9, 1e3, log=True)
         # n_bins = trial.suggest_int('nbins', 5, 30)
         # age_graph = nx.path_graph(n_bins)
@@ -161,7 +154,7 @@ def main():
                                 "to_int",
                                 FunctionTransformer(lambda x: np.isnan(x).astype(int)),
                                 ["Age", "Sex_M"],
-                            )
+                            ),
                         ],
                         verbose_feature_names_out=False,
                         remainder="passthrough",
@@ -180,7 +173,8 @@ def main():
                             # (NetworkXRegularizationGraph(graph=sex_graph, name='Sex_M'), 0.0),
                             (
                                 NetworkXRegularizationGraph(
-                                    graph=sex_graph, name="Sex_M"
+                                    graph=sex_graph,
+                                    name="Sex_M",
                                 ),
                                 gamma,
                             ),
@@ -192,7 +186,7 @@ def main():
                     ),
                 ),
                 # ('predict', LogisticRegression(fit_intercept=False))
-            ]
+            ],
         )
         # d[(alpha, beta, n_bins)] = evaluate_model(model)
         try:
@@ -207,18 +201,11 @@ def main():
             # 'beta': 1e-9,
             "gamma": 1e-9,
             # 'nbins': 30,
-        }
+        },
     )
     study.optimize(objective, n_trials=100)
 
-    best_params = study.best_params
-    best_value = study.best_value
-
-    print("Best parameters:", best_params)
-    print("Best value:", best_value)
     plot_slice(study)
-
-    pass
 
 
 if __name__ == "__main__":

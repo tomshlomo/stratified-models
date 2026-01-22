@@ -12,7 +12,7 @@ from stratified_models.tests.data_generators import DataGenerator
 
 def test_ridge_estimator() -> None:
     gen = DataGenerator()
-    df_train, y_train, df_test, y_test, theta_true = gen.generate(
+    df_train, y_train, df_test, y_test, _theta_true = gen.generate(
         n_train=10_000,
         n_test=1000,
     )
@@ -23,8 +23,10 @@ def test_ridge_estimator() -> None:
             (
                 NetworkXRegularizationGraph(graph=graph, name=name),
                 1 / (1 - w),
-            )  # todo: 1/(1-w) is arbitrary
-            for (graph, w), name in zip(gen.graphs, gen.stratification_features())
+            )  # TODO: 1/(1-w) is arbitrary
+            for (graph, w), name in zip(
+                gen.graphs, gen.stratification_features(), strict=False,
+            )
         ),
         regression_features=gen.regression_features(),
         fitter=ADMMFitter(),
@@ -48,7 +50,7 @@ def test_ridge_estimator() -> None:
 
 def test_logistic_regression_calssifier_with_l1_regularization() -> None:
     gen = DataGenerator(theta_cardinality=2, sign=True, sigma=0.0, m=5)
-    df_train, y_train, df_test, y_test, theta_true = gen.generate(
+    df_train, y_train, df_test, y_test, _theta_true = gen.generate(
         n_train=50_000,
         n_test=50_000,
     )
@@ -61,8 +63,10 @@ def test_logistic_regression_calssifier_with_l1_regularization() -> None:
             (
                 NetworkXRegularizationGraph(graph=graph, name=name),
                 1 / (1 - w),
-            )  # todo: 1/(1-w) is arbitrary
-            for (graph, w), name in zip(gen.graphs, gen.stratification_features())
+            )  # TODO: 1/(1-w) is arbitrary
+            for (graph, w), name in zip(
+                gen.graphs, gen.stratification_features(), strict=False,
+            )
         ),
         regression_features=gen.regression_features(),
         fitter=ADMMFitter(),

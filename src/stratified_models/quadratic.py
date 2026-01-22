@@ -30,9 +30,7 @@ from stratified_models.linear_operator import (
 
 @dataclass
 class ExplicitQuadraticFunction:
-    """
-    x * (q * x) / 2 + (c * x) + d
-    """
+    """x * (q * x) / 2 + (c * x) + d."""
 
     q: LinearOperator
     c: Array
@@ -51,9 +49,11 @@ class ExplicitQuadraticFunction:
 
     @classmethod
     def sum(
-        cls, m: int, components: tuple[tuple[ExplicitQuadraticFunction, float], ...]
+        cls,
+        m: int,
+        components: tuple[tuple[ExplicitQuadraticFunction, float], ...],
     ) -> ExplicitQuadraticFunction:
-        # todo: if empty return the zero quadratic
+        # TODO: if empty return the zero quadratic
         q = []
         c = np.zeros(m)
         d = 0.0
@@ -69,7 +69,10 @@ class ExplicitQuadraticFunction:
 
     @classmethod
     def concat(
-        cls, k: int, m: int, components: dict[int, ExplicitQuadraticFunction]
+        cls,
+        k: int,
+        m: int,
+        components: dict[int, ExplicitQuadraticFunction],
     ) -> ExplicitQuadraticFunction:
         q = {}
         c = np.zeros((k, m))
@@ -141,7 +144,7 @@ class ExplicitQuadraticFunction:
 #         return x
 #
 #     def traces(self):
-#         # todo: rewrite using einsum
+#         # TODO: rewrite using einsum
 #         x = np.zeros(self.k)
 #         for i in range(self.k):
 #             x[i] = np.trace(self.q[i])

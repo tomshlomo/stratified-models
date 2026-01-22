@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Hashable, Iterable, Sequence
 from dataclasses import dataclass
-from typing import Generic, Hashable, Iterable, Sequence, TypeVar
+from typing import TypeVar
 
 import numpy as np
 import pandas as pd
@@ -17,7 +18,7 @@ F = TypeVar("F", bound=ScalarFunction[Array])
 
 
 @dataclass
-class StratifiedLinearRegressionProblem(Generic[F]):
+class StratifiedLinearRegressionProblem[F: ScalarFunction[Array]]:
     x: pd.DataFrame
     y: pd.Series
     loss_factory: LossFactory[F]
@@ -41,14 +42,15 @@ class StratifiedLinearRegressionProblem(Generic[F]):
         for node, x, y in self.node_data_iter():
             yield (
                 self.loss_factory.build_loss_function(
-                    x[self.regression_features].values, y.values
+                    x[self.regression_features].values,
+                    y.values,
                 ),
                 node,
             )
 
     def node_data_iter(
         self,
-    ) -> Iterable[tuple[tuple[Hashable, ...], pd.DataFrame, pd.Series,]]:
+    ) -> Iterable[tuple[tuple[Hashable, ...], pd.DataFrame, pd.Series]]:
         for node, x_slice in self.x.groupby(self.stratification_features)[
             self.regression_features
         ]:
@@ -61,13 +63,13 @@ class StratifiedLinearRegressionProblem(Generic[F]):
         for i, (graph, gamma) in enumerate(self.graphs):
             yield graph.laplacian(axis=i, dims=dims), gamma
 
-    def theta_shape(self) -> tuple[int, ...]:  # todo: remove?
+    def theta_shape(self) -> tuple[int, ...]:  # TODO: remove?
         return *self.graph_sizes(), self.m
 
     def graph_sizes(self) -> tuple[int, ...]:
         return tuple(graph.number_of_nodes() for graph, _ in self.graphs)
 
-    def theta_flat_shape(self) -> tuple[int, int]:  # todo: remove?
+    def theta_flat_shape(self) -> tuple[int, int]:  # TODO: remove?
         k = int(np.prod(self.graph_sizes()))
         return k, self.m
 
@@ -80,7 +82,7 @@ class StratifiedLinearRegressionProblem(Generic[F]):
     def get_node_index(self, node: tuple[Hashable, ...]) -> tuple[int, ...]:
         return tuple(
             graph.get_node_index(sub_node)
-            for (graph, _), sub_node in zip(self.graphs, node)
+            for (graph, _), sub_node in zip(self.graphs, node, strict=False)
         )
 
     def regularizers(self) -> Iterable[tuple[F, float]]:
@@ -91,7 +93,19 @@ class StratifiedLinearRegressionProblem(Generic[F]):
     def cost(self, theta: Theta) -> float:
         cost = 0.0
         for loss, node in self.loss_iter():
-            cost += loss(theta.df.loc[node].values)
+            # `node` is always a tuple (see `node_data_iter`). For a single graph this
+            # means a 1-tuple like `(z,)`.
+            #
+            # - If `theta.df.index` is a MultiIndex (the common case via `Theta.from_array`)
+            #   we want to index with the tuple.
+            # - If a user constructs `Theta` manually with a single-level index (as the
+            #   tests do), pandas treats a tuple as a listlike indexer and returns a 2D
+            #   frame; unwrap the 1-tuple to a scalar key.
+            row_key: object = node
+            if not isinstance(theta.df.index, pd.MultiIndex) and len(node) == 1:
+                row_key = node[0]
+
+            cost += loss(theta.df.loc[row_key, :].values)
         for reg, gamma in self.regularizers():
             cost += gamma * reg(theta.df.values)
         for lap, gamma in self.laplacians():
@@ -138,7 +152,7 @@ class Theta:
 
     def predict(self, x: pd.DataFrame) -> pd.Series:
         rows = pd.MultiIndex.from_arrays(
-            x.loc[:, self.stratification_features()].values.T
+            x.loc[:, self.stratification_features()].values.T,
         )
         theta_aligned = self.df.loc[rows, :]
         y = np.einsum(

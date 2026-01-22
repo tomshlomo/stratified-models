@@ -3,7 +3,7 @@ from __future__ import annotations
 from abc import abstractmethod
 from dataclasses import dataclass
 from functools import partial
-from typing import Generic, Optional, TypeVar, Union
+from typing import TypeVar, Union
 
 import cvxpy as cp
 import numpy as np
@@ -24,13 +24,13 @@ L = TypeVar("L", bound=ScalarFunction[Array], covariant=True)
 DenseOrSparseMatrix = Union[Array, scipy.sparse.spmatrix]
 
 
-class LossFactory(Generic[L]):
+class LossFactory[L: ScalarFunction[Array]]:
     @abstractmethod
     def build_loss_function(self, x: DenseOrSparseMatrix, y: Array) -> L:
         raise NotImplementedError
 
 
-EinsumPath = list[Union[str, tuple[int, ...]]]
+EinsumPath = list[str | tuple[int, ...]]
 
 
 @dataclass
@@ -41,7 +41,7 @@ class SumOfSquaresProxCache:
     einsum_path: EinsumPath
 
 
-def _to_numpy_array(x: Union[Array, scipy.sparse.spmatrix]) -> Array:
+def _to_numpy_array(x: Array | scipy.sparse.spmatrix) -> Array:
     return (  # type:ignore[no-any-return]
         x.toarray() if isinstance(x, scipy.sparse.spmatrix) else x
     )
@@ -51,7 +51,7 @@ def _to_numpy_array(x: Union[Array, scipy.sparse.spmatrix]) -> Array:
 class SumOfSquaresLoss(ProxableScalarFunction[Array], QuadraticScalarFunction[Array]):
     a: DenseOrSparseMatrix
     b: Array
-    _prox_cache: Optional[SumOfSquaresProxCache] = None
+    _prox_cache: SumOfSquaresProxCache | None = None
 
     def __call__(self, x: Array) -> float:
         y = self.a @ x
@@ -67,8 +67,13 @@ class SumOfSquaresLoss(ProxableScalarFunction[Array], QuadraticScalarFunction[Ar
         else:
             d, u = np.linalg.eigh(_to_numpy_array(self.a @ self.a.T))
             u = self.a.T @ u
-        path, path_str = np.einsum_path(
-            "nm,m,km,k->n", u, d, u, np.zeros(u.shape[0]), optimize="optimal"
+        path, _path_str = np.einsum_path(
+            "nm,m,km,k->n",
+            u,
+            d,
+            u,
+            np.zeros(u.shape[0]),
+            optimize="optimal",
         )
 
         self._prox_cache = SumOfSquaresProxCache(
@@ -84,12 +89,11 @@ class SumOfSquaresLoss(ProxableScalarFunction[Array], QuadraticScalarFunction[Ar
         return self.a.shape[0] >= self.a.shape[1]
 
     def _prox_tall(self, rhs: Array, t: float) -> Array:
-        """
-        argmin 1/2 |ax-b|^2 + 1/2t |x - v|^2
+        """Argmin 1/2 |ax-b|^2 + 1/2t |x - v|^2
         a'(ax-b) + 1/t (x -v) = 0
         (a'a + 1/t I) x = 1/t v + a'b
         (a'a + 1/t I) x = 1/t v + a'b
-        x = (a'a + 1/t I)^-1 (1/t v + a'b)
+        x = (a'a + 1/t I)^-1 (1/t v + a'b).
 
         let a = udu' be the eigen decomposition of a'a.
         then:
@@ -102,7 +106,7 @@ class SumOfSquaresLoss(ProxableScalarFunction[Array], QuadraticScalarFunction[Ar
 
         w = 1 / (d + 1 / t)
 
-        x1 = np.einsum(
+        return np.einsum(
             "nm,m,km,k->n",
             u,
             w,
@@ -110,15 +114,13 @@ class SumOfSquaresLoss(ProxableScalarFunction[Array], QuadraticScalarFunction[Ar
             rhs,
             optimize=prox_cache.einsum_path,
         )
-        return x1  # type:ignore[no-any-return]
 
     def _prox_fat(self, rhs: Array, t: float) -> Array:
-        """
-        argmin 1/2 |ax-b|^2 + 1/2t |x - v|^2
+        """Argmin 1/2 |ax-b|^2 + 1/2t |x - v|^2
         a'(ax-b) + 1/t (x -v) = 0
         (a'a + 1/t I) x = 1/t v + a'b
         (a'a + 1/t I) x = 1/t v + a'b
-        x = (a'a + 1/t I)^-1 (1/t v + a'b)
+        x = (a'a + 1/t I)^-1 (1/t v + a'b).
 
         if a is fat, then we can use the matrix inversion lemma:
         (a'a + 1/t I)^-1 = tI - t^2 a'(I + taa')^-1 a
@@ -131,7 +133,6 @@ class SumOfSquaresLoss(ProxableScalarFunction[Array], QuadraticScalarFunction[Ar
         x = t (I - t a'uwu'a) rhs
           = t (rhs - t a'uwu'a rhs)
         """
-
         prox_cache = self._get_prox_cache()
         u = prox_cache.u
         w = 1 / (1.0 + t * prox_cache.d)
@@ -148,8 +149,7 @@ class SumOfSquaresLoss(ProxableScalarFunction[Array], QuadraticScalarFunction[Ar
         rhs = v / t + atb
         if self.is_tall:
             return self._prox_tall(rhs=rhs, t=t)
-        else:
-            return self._prox_fat(rhs=rhs, t=t)
+        return self._prox_fat(rhs=rhs, t=t)
 
     def cvxpy_expression(
         self,
@@ -158,14 +158,13 @@ class SumOfSquaresLoss(ProxableScalarFunction[Array], QuadraticScalarFunction[Ar
         return cp.sum_squares(self.a @ x - self.b) / 2  # type: ignore[attr-defined]
 
     def to_explicit_quadratic(self) -> ExplicitQuadraticFunction:
-        """
-        |ax - b|^2 / 2 = x'a'ax / 2 - b'ax + b'b/2
+        """|ax - b|^2 / 2 = x'a'ax / 2 - b'ax + b'b/2
         :return:
         """
         return ExplicitQuadraticFunction(
             q=MatrixBasedLinearOperator(
-                self.a.T @ self.a
-            ),  # todo: low rank linear operator
+                self.a.T @ self.a,
+            ),  # TODO: low rank linear operator
             c=-self.a.T @ self.b,
             d=float((self.b @ self.b) / 2),
         )
@@ -178,20 +177,18 @@ class SumOfSquaresLossFactory(LossFactory[SumOfSquaresLoss]):
 
 @dataclass
 class LogisticOverLinear(ProxableScalarFunction[Array]):
-    """
-    f(x) = sum_i log(1 + exp(a_i'x))
-    """
+    """f(x) = sum_i log(1 + exp(a_i'x))."""
 
-    # todo: can be generalized to general binary classification l(x;a,y) = p(yax)
-    a: Union[Array, scipy.sparse.spmatrix]
-    _prox_cache: Optional[SumOfSquaresProxCache] = None
+    # TODO: can be generalized to general binary classification l(x;a,y) = p(yax)
+    a: Array | scipy.sparse.spmatrix
+    _prox_cache: SumOfSquaresProxCache | None = None
 
     def __call__(self, x: Array) -> float:
         losses = np.log1p(np.exp(self.a @ x))
         return float(losses.sum())
 
     def prox(self, v: X, t: float) -> X:
-        # todo: more control over optimizer (method, memory, tolerances, and so on)
+        # TODO: more control over optimizer (method, memory, tolerances, and so on)
         result = scipy.optimize.minimize(
             partial(self._prox_eval_with_grad),
             x0=v,
@@ -202,11 +199,13 @@ class LogisticOverLinear(ProxableScalarFunction[Array]):
         return result.x  # type:ignore[no-any-return]
 
     def _prox_eval_with_grad(
-        self, x: Array, v: Array, rho: float
+        self,
+        x: Array,
+        v: Array,
+        rho: float,
     ) -> tuple[float, Array]:
-        """
-        h(x) = sum_i log(1 + exp(a_i'x) + rho/2 norm(x - v)^2
-        grad h(x) = sum_i a_i exp(a_i'x) / (1 + exp(a_i'x) + rho (x - v)
+        """h(x) = sum_i log(1 + exp(a_i'x) + rho/2 norm(x - v)^2
+        grad h(x) = sum_i a_i exp(a_i'x) / (1 + exp(a_i'x) + rho (x - v).
         """
         exp_z = np.exp(self.a @ x)
         h = np.log1p(exp_z).sum()
@@ -228,7 +227,9 @@ class LogisticOverLinear(ProxableScalarFunction[Array]):
 
 class LogisticLossFactory(LossFactory[LogisticOverLinear]):
     def build_loss_function(
-        self, x: DenseOrSparseMatrix, y: Array
+        self,
+        x: DenseOrSparseMatrix,
+        y: Array,
     ) -> LogisticOverLinear:
         y = y * 2 - 1  # from {0,1} to {-1,1}
         y = -y[:, np.newaxis]

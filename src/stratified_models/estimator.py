@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Hashable
 from dataclasses import dataclass
-from typing import Generic, Hashable, Optional, Union
+from typing import Generic
 
 import numpy as np
 import pandas as pd
@@ -64,13 +65,17 @@ class StratifiedLinearEstimator(Generic[F, RefitDataType]):
         return self
 
     def attempt_refit(
-        self, x: pd.DataFrame, y: pd.Series
-    ) -> Union[tuple[Theta, RefitDataType], tuple[None, None]]:
+        self,
+        x: pd.DataFrame,
+        y: pd.Series,
+    ) -> tuple[Theta, RefitDataType] | tuple[None, None]:
         previous_fit_data_ = self._get_previous_fit_data()
         if not previous_fit_data_:
             return None, None
         problem_update = self._get_problem_update(
-            previous_fit_data=previous_fit_data_, x=x, y=y
+            previous_fit_data=previous_fit_data_,
+            x=x,
+            y=y,
         )
         if not problem_update:
             return None, None
@@ -81,7 +86,9 @@ class StratifiedLinearEstimator(Generic[F, RefitDataType]):
         return theta, fitter_refit_data
 
     def _fit_from_scratch(
-        self, x: pd.DataFrame, y: pd.Series
+        self,
+        x: pd.DataFrame,
+        y: pd.Series,
     ) -> tuple[Theta, RefitDataType]:
         problem = self._get_problem(x=x, y=y)
         theta, fitter_refit_data, _ = self.fitter.fit(problem=problem)
@@ -107,7 +114,9 @@ class StratifiedLinearEstimator(Generic[F, RefitDataType]):
         )
 
     def _get_problem(
-        self, x: pd.DataFrame, y: pd.Series
+        self,
+        x: pd.DataFrame,
+        y: pd.Series,
     ) -> StratifiedLinearRegressionProblem[F]:
         return StratifiedLinearRegressionProblem(
             x=x,
@@ -123,7 +132,7 @@ class StratifiedLinearEstimator(Generic[F, RefitDataType]):
         x: pd.DataFrame,
         y: pd.Series,
         previous_fit_data: EstimatorPreviousFitData[F, RefitDataType],
-    ) -> Optional[ProblemUpdate]:
+    ) -> ProblemUpdate | None:
         # check if structure changed
         if not (
             [f for f, _ in self.regularizers_factories]
@@ -136,13 +145,13 @@ class StratifiedLinearEstimator(Generic[F, RefitDataType]):
 
         # check if fitter changed
         if self.fitter != previous_fit_data.fitter:
-            # todo: in this case, we should at least use the given theta as a hint for
+            # TODO: in this case, we should at least use the given theta as a hint for
             #  next fit
             return None
 
         # check if data changed
         if not (x is previous_fit_data.x and y is previous_fit_data.y):
-            # todo: in this case, we should at least use the given theta as a hint for
+            # TODO: in this case, we should at least use the given theta as a hint for
             #  next fit
             return None
 
@@ -155,7 +164,7 @@ class StratifiedLinearEstimator(Generic[F, RefitDataType]):
 
     def _get_previous_fit_data(
         self,
-    ) -> Optional[EstimatorPreviousFitData[F, RefitDataType]]:
+    ) -> EstimatorPreviousFitData[F, RefitDataType] | None:
         if not self.warm_start:
             return None
         return getattr(self, "previous_fit_data_", None)
@@ -171,12 +180,14 @@ class StratifiedLinearEstimator(Generic[F, RefitDataType]):
         cls,
         gamma: float,
         graphs: tuple[
-            tuple[RegularizationGraph[ProxableScalarFunction[Array]], float], ...
+            tuple[RegularizationGraph[ProxableScalarFunction[Array]], float],
+            ...,
         ],
         regression_features: list[str],
         fitter: Fitter[
-            ProxableScalarFunction[Array], RefitDataType
-        ],  # todo: AutoFitter - decide which fitter to use based on problem
+            ProxableScalarFunction[Array],
+            RefitDataType,
+        ],  # TODO: AutoFitter - decide which fitter to use based on problem
         warm_start: bool = True,
     ) -> StratifiedLinearEstimator[ProxableScalarFunction[Array], RefitDataType]:
         return StratifiedLinearEstimator(
@@ -190,10 +201,9 @@ class StratifiedLinearEstimator(Generic[F, RefitDataType]):
 
 
 class StratifiedLogisticRegressionClassifier(Generic[F, RefitDataType]):
-    """
-    todo: Not a valid sklearn classifier:
-        cloning will be problematic since init params are not directly stored, and also
-        theta is not directly stored?
+    """todo: Not a valid sklearn classifier:
+    cloning will be problematic since init params are not directly stored, and also
+    theta is not directly stored?
     """
 
     def __init__(
@@ -205,9 +215,10 @@ class StratifiedLogisticRegressionClassifier(Generic[F, RefitDataType]):
         warm_start: bool,
     ) -> None:
         self.estimator: StratifiedLinearEstimator[
-            F, RefitDataType
+            F,
+            RefitDataType,
         ] = StratifiedLinearEstimator(
-            loss_factory=LogisticLossFactory(),  # type: ignore[arg-type] # todo: fix
+            loss_factory=LogisticLossFactory(),  # type: ignore[arg-type] # TODO: fix
             regularizers_factories=regularizers_factories,
             graphs=graphs,
             regression_features=regression_features,

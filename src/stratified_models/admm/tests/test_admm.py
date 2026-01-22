@@ -14,10 +14,9 @@ RNG = np.random.RandomState(42)
 
 
 def test_ridge_regression() -> None:
-    """
-    argmin 1/2 |ax - b|^2 + gamma/2 |x|^2
+    """Argmin 1/2 |ax - b|^2 + gamma/2 |x|^2
     a'(ax-b) + gamma x = 0
-    (a'a + gamma I) x = a'b
+    (a'a + gamma I) x = a'b.
     """
     n = 10
     m = 3
@@ -47,13 +46,13 @@ def test_ridge_regression() -> None:
             cost_exp2,
         ),
     ]:
-        x, cost, state, converged = ConsensusADMMSolver().solve(problem=problem)
+        x, cost, _state, converged = ConsensusADMMSolver().solve(problem=problem)
         assert np.linalg.norm(x - x_exp) <= 1e-4
         assert abs(cost - cost_exp) <= 1e-6
         assert converged
 
         _, _, _, converged = ConsensusADMMSolver(max_iterations=5).solve(
-            problem=problem
+            problem=problem,
         )
         assert not converged
 
@@ -66,9 +65,9 @@ def test_lasso() -> None:
     gamma = 1e-1
     x_var = cp.Variable(m)  # type: ignore[attr-defined]
     cost = cp.sum_squares(  # type: ignore[attr-defined]
-        a @ x_var - b
+        a @ x_var - b,
     ) / 2 * gamma + cp.norm1(  # type: ignore[attr-defined]
-        x_var
+        x_var,
     )
     cvxpy_problem = cp.Problem(  # type: ignore[attr-defined]
         cp.Minimize(cost),  # type: ignore[attr-defined]
@@ -82,7 +81,7 @@ def test_lasso() -> None:
         g=L1(),
         var_shape=(m,),
     )
-    x, cost, state, converged = ConsensusADMMSolver().solve(problem=problem)
+    x, cost, _state, converged = ConsensusADMMSolver().solve(problem=problem)
     assert abs(cost - cost_exp) <= 1e-6
     assert np.linalg.norm(x - x_exp) <= 1e-4
     assert converged
@@ -96,7 +95,7 @@ def test_non_negative_least_squares() -> None:
         g=NonNegativeIndicator(),
         var_shape=(m,),
     )
-    x, cost, state, converged = ConsensusADMMSolver().solve(problem=problem)
+    x, _cost, _state, converged = ConsensusADMMSolver().solve(problem=problem)
     x_exp = b.clip(min=0)
     assert np.linalg.norm(x - x_exp) <= 1e-6
     assert converged

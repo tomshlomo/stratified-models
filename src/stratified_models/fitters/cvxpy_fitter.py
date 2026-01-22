@@ -30,12 +30,14 @@ class CVXPYRefitData(RefitDataBase[CVXPYScalarFunction]):
 
 class CVXPYFitter(Fitter[CVXPYScalarFunction, CVXPYRefitData]):
     def fit(
-        self, problem: StratifiedLinearRegressionProblem[CVXPYScalarFunction]
+        self,
+        problem: StratifiedLinearRegressionProblem[CVXPYScalarFunction],
     ) -> tuple[Theta, CVXPYRefitData, float]:
-        cvxpy_problem, theta_vars, refit_data, loss = self._build_cvxpy_problem(problem)
-        # todo: verbose flag, select solver
+        cvxpy_problem, theta_vars, refit_data, _loss = self._build_cvxpy_problem(
+            problem,
+        )
+        # TODO: verbose flag, select solver
         cvxpy_problem.solve(verbose=True)  # type:ignore[no-untyped-call]
-        print(f"{loss.value / problem.n=}")
         return (
             Theta.from_array(arr=theta_vars.value, problem=problem),
             refit_data,
@@ -43,25 +45,30 @@ class CVXPYFitter(Fitter[CVXPYScalarFunction, CVXPYRefitData]):
         )
 
     def refit(
-        self, problem_update: ProblemUpdate, refit_data: CVXPYRefitData
+        self,
+        problem_update: ProblemUpdate,
+        refit_data: CVXPYRefitData,
     ) -> tuple[Theta, CVXPYRefitData, float]:
         for param, new_val in itertools.chain(
             zip(
                 refit_data.local_reg_params,
                 problem_update.new_regularization_gammas,
+                strict=False,
             ),
             zip(
                 refit_data.laplace_params,
                 problem_update.new_graph_gammas,
+                strict=False,
             ),
         ):
             param.value = new_val
         refit_data.previous_cvxpy_problem.solve(
-            verbose=True
+            verbose=True,
         )  # type:ignore[no-untyped-call]
         return (
             Theta.from_array(
-                arr=refit_data.theta_vars.value, problem=refit_data.previous_problem
+                arr=refit_data.theta_vars.value,
+                problem=refit_data.previous_problem,
             ),
             refit_data,
             refit_data.previous_cvxpy_problem.value,

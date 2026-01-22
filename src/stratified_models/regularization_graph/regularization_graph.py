@@ -1,5 +1,6 @@
 from abc import abstractmethod
-from typing import Generic, Hashable, TypeVar
+from collections.abc import Hashable
+from typing import TypeVar
 
 import pandas as pd
 
@@ -8,8 +9,8 @@ from stratified_models.scalar_function import Array, ScalarFunction
 F = TypeVar("F", bound=ScalarFunction[Array], covariant=True)
 
 
-class RegularizationGraph(Generic[F]):
-    def __init__(self, nodes: pd.Index):
+class RegularizationGraph[F: ScalarFunction[Array]]:
+    def __init__(self, nodes: pd.Index) -> None:
         self.nodes = nodes
 
     def get_node_index(self, node: Hashable) -> int:

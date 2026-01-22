@@ -27,3 +27,32 @@ dev = [
     "ruff>=0.14.13",
     "ty>=0.0.13",
 ]
+
+[tool.ruff.lint]
+# Start with defaults (E, F) and add Bugbear (B) and isort (I)
+extend-select = ["ALL"]
+ignore = [
+    "D103",
+    "D104",
+    "D100",
+    "D101",
+    "S101",
+    "D107",
+    "D102",
+    "D105",
+    "D203",
+    "D213",
+    "TC003",
+    "TC001",
+    "TD003",
+    "FIX002",
+    "TC002",
+    "TD002", # Missing author in TODO; try: `# TODO(<author_name>): ...` or `# TODO @<author_name>: ...`
+    "ERA001", # Found commented-out code
+    "D205" # 1 blank line required between summary line and description
+]
+
+
+[tool.ruff.lint.extend-per-file-ignores]
+"tests/**/*.py" = ["SLF001", "PLR2004"]
+"**/test_*.py" = ["SLF001", "PLR2004"]

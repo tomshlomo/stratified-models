@@ -3,7 +3,6 @@ from __future__ import annotations
 import math
 import time
 from dataclasses import dataclass
-from typing import Optional
 
 import numpy as np
 
@@ -86,13 +85,13 @@ class ConsensusADMMSolver:
     mu: float = 10.0
     tau_incr: float = 2.0
     tau_decr: float = 1 / 2
-    k: int = 20  # todo: rename
-    tau: float = 5  # todo: rename
+    k: int = 20  # TODO: rename
+    tau: float = 5  # TODO: rename
 
     def solve(
         self,
         problem: ConsensusProblem,
-        initial_state_candidates: Optional[list[ADMMState]] = None,
+        initial_state_candidates: list[ADMMState] | None = None,
     ) -> tuple[Array, float, ADMMState, bool]:
         initial_state_candidates = initial_state_candidates or []
         state = self._get_init_state(
@@ -102,16 +101,7 @@ class ConsensusADMMSolver:
         best_cost = problem.cost(state.z)
         best_z = state.z
         costs_vec = np.empty(self.max_iterations)
-        print("Starting ADMM iterations")
-        print(
-            f"{'iteration':10s} "
-            f"{'time (sec)':10s} "
-            f"{'cost':10s} "
-            f"{'prim_res':10s} "
-            f"{'dual_res':10s}"
-        )
-        print(" ".join(["=" * 10] * 5))
-        start = time.time()
+        time.time()
         converged = False
         for i in range(self.max_iterations):
             state_tmp = self._t_update(state=state)
@@ -122,13 +112,6 @@ class ConsensusADMMSolver:
                 best_cost = cost
                 best_z = state.z
 
-            print(
-                f"{i:10d} "
-                f"{time.time() - start:10.2f} "
-                f"{cost:10.3e} "
-                f"{state.primal_residual_norm:10.3e} "
-                f"{state.dual_residual_norm:10.3e}"
-            )
             if self._stop(
                 state=state,
                 problem=problem,
@@ -153,9 +136,12 @@ class ConsensusADMMSolver:
             [
                 f.prox(z - uu, tt * gamma)
                 for (f, gamma), uu, tt in zip(
-                    problem.f, u, t
-                )  # todo: we don't need x in the state
-            ]
+                    problem.f,
+                    u,
+                    t,
+                    strict=False,
+                )  # TODO: we don't need x in the state
+            ],
         )
 
         # z update
@@ -200,7 +186,7 @@ class ConsensusADMMSolver:
             [
                 state.x_norm,
                 norm(state.z) * math.sqrt(problem.n),
-            ]
+            ],
         )
         eps_primal = eps_abs + eps_rel_primal
         if state.primal_residual_norm > eps_primal:
@@ -210,14 +196,13 @@ class ConsensusADMMSolver:
         return costs[i] - p <= self.eps_rel * p  # type:ignore[no-any-return]
 
     def _estimate_optimal_value(self, costs: Array) -> float:
-        """
-        sum(cost[j] - cost[j+1] j=i...) = cost[i] - p*
+        """sum(cost[j] - cost[j+1] j=i...) = cost[i] - p*
         where p* is the optimal value.
         let:
         x[i] = log(cost[i] - cost[i-1])
         and assume we have a and b such that:
         x[i] = a + b*i
-        (which is equivalent to assuming cost[i] = p* + cost0 * exp(-i/tau))
+        (which is equivalent to assuming cost[i] = p* + cost0 * exp(-i/tau)).
 
         then:
         p* = cost[i] - sum(exp(x[j]) for j=i..)
@@ -225,7 +210,7 @@ class ConsensusADMMSolver:
            = cost[i] - exp(a + bi) / (1 - exp(b))
         for convenience we will always reindex such that i=0
         """
-        # todo: improve speed:
+        # TODO: improve speed:
         #  rank1 updates to least squares? or at least to sums and sos
         #  cache log of diffs in in the state itself.
         y = np.log(-np.diff(costs[-(self.k + 1) :]))
@@ -234,7 +219,7 @@ class ConsensusADMMSolver:
         x = np.arange(-self.k + 1, 1)
         w = 2.0 ** (x / self.tau)
         w[mask] = 0.0
-        # todo: use cov=True, and estimate a lower bound on p
+        # TODO: use cov=True, and estimate a lower bound on p
         #  using the covariance + delta method? might be an overkill
         z = np.polyfit(x=x, y=y, deg=1, w=w)
         b, a = z
@@ -268,9 +253,7 @@ class ConsensusADMMSolver:
         initial_state_candidates.append(zero_state)
 
         # advance one step for each state
-        next_states = map(
-            lambda state: self._step(problem, state), initial_state_candidates
-        )
+        next_states = (self._step(problem, state) for state in initial_state_candidates)
 
         # return state with the lowest cost
         return min(next_states, key=lambda state: problem.cost(state.z))

@@ -60,7 +60,7 @@
 #         self.theta.df.columns = self.regression_columns
 #
 #     def predict(self, X: pd.DataFrame) -> pd.Series:
-#         # todo: probably faster to use pd.merge (at least for large k)
+#         # TODO: probably faster to use pd.merge (at least for large k)
 #         y = pd.Series(index=X.index, data=0.0)
 #         for z, X2 in X.groupby(
 #         self.stratification_features())[self.regression_columns]:

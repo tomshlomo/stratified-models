@@ -1,5 +1,4 @@
 from dataclasses import dataclass, field
-from typing import Tuple
 
 import networkx as nx
 import numpy as np
@@ -14,12 +13,12 @@ RNG = np.random.default_rng(42)
 @dataclass
 class DataGenerator:
     m: int = 10
-    graphs: tuple[Tuple[nx.Graph, float], ...] = field(
+    graphs: tuple[tuple[nx.Graph, float], ...] = field(
         default_factory=lambda: (
             (nx.cycle_graph(20), 0.9),
             (nx.path_graph(10), 0.5),
             (nx.path_graph(12), 0.1),
-        )
+        ),
     )
     smoothing_iters: int = 20
     sigma: float = 1e-1
@@ -65,7 +64,7 @@ class DataGenerator:
             right_index=True,
         )
         y = (df.loc[:, regression_cols] * theta_aligned.loc[:, regression_cols]).sum(
-            axis=1
+            axis=1,
         )
         y += RNG.standard_normal(y.shape[0]) * self.sigma
         if self.sign:
@@ -76,7 +75,7 @@ class DataGenerator:
         regression_cols = self.regression_features()
         strat_cols = self.stratification_features()
         df = pd.DataFrame(RNG.standard_normal((n, self.m)), columns=regression_cols)
-        for (graph, _), col in zip(self.graphs, strat_cols):
+        for (graph, _), col in zip(self.graphs, strat_cols, strict=False):
             df[col] = RNG.integers(0, graph.number_of_nodes(), n)
         return df
 
@@ -84,14 +83,16 @@ class DataGenerator:
         self,
         n: int,
         theta: pd.DataFrame,
-    ) -> Tuple[pd.DataFrame, pd.Series]:
+    ) -> tuple[pd.DataFrame, pd.Series]:
         df = self.get_df(n)
         y = self.get_y(df, theta)
         return df, y
 
     def generate(
-        self, n_train: int, n_test: int
-    ) -> Tuple[pd.DataFrame, pd.Series, pd.DataFrame, pd.Series, pd.DataFrame,]:
+        self,
+        n_train: int,
+        n_test: int,
+    ) -> tuple[pd.DataFrame, pd.Series, pd.DataFrame, pd.Series, pd.DataFrame]:
         theta = self.get_theta()
         df_train, y_train = self.generate_df_y(n=n_train, theta=theta)
         df_test, y_test = self.generate_df_y(n=n_test, theta=theta)

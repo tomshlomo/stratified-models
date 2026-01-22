@@ -9,15 +9,16 @@ from stratified_models.scalar_function import TensorQuadForm
 
 
 class NetworkXRegularizationGraph(RegularizationGraph[TensorQuadForm]):
-    # todo:rename to simply "WEIGHT_KEY", and change value to simply "weight"
-    # todo: should be a parameter to constructor, with default value "weight"
+    # TODO:rename to simply "WEIGHT_KEY", and change value to simply "weight"
+    # TODO: should be a parameter to constructor, with default value "weight"
     LAPLACE_REG_PARAM_KEY = "laplace_reg_param"
 
-    def __init__(self, graph: nx.Graph, name: str):
+    def __init__(self, graph: nx.Graph, name: str) -> None:
         super().__init__(nodes=pd.Index(graph.nodes, name=name))
         self.graph = graph
         self._laplacian_matrix = nx.laplacian_matrix(
-            self.graph, weight=self.LAPLACE_REG_PARAM_KEY
+            self.graph,
+            weight=self.LAPLACE_REG_PARAM_KEY,
         )
 
     def laplacian(self, axis: int, dims: tuple[int, ...]) -> TensorQuadForm:
