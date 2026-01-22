@@ -1,0 +1,124 @@
+[project]
+name = "stratified-models"
+version = "0.1.0"
+description = "A python package for training stratified machine learning models with laplacian regularization"
+authors = [{ name = "Tom Shlomo", email = "tomshlomo@gmail.com" }]
+requires-python = ">=3.9,<4"
+readme = "README.md"
+license = "MIT"
+keywords = [
+    "startification",
+    "laplacian regularization",
+    "machine learning",
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+]
+dependencies = [
+    "importlib-metadata>=5.2.0,<6 ; python_full_version < '3.8'",
+    "networkx>=2.8.8,<3",
+    "pandas>=1.5.2,<2",
+    "typing-extensions>=4.4.0,<5",
+    "plotly>=5.11.0,<6",
+    "tqdm>=4.64.1,<5",
+    "xarray>=2023.2.0,<2024",
+    "pre-commit>=3.2.2,<4",
+]
+
+[project.urls]
+Homepage = "https://github.com/tomshlomo/stratified-models"
+Repository = "https://github.com/tomshlomo/stratified-models"
+
+[dependency-groups]
+dev = [
+    "pytest>=7.2.0,<8",
+    "pytest-cov>=4.0.0,<5",
+    "coverage[toml]>=7.0.1,<8",
+    "black>=22.12.0,<23",
+    "flake8>=6.0.0,<7",
+    "flake8-import-order>=0.18.2,<0.19",
+    "mypy>=0.991,<0.992",
+    "typeguard>=2.13.3,<3",
+    "pytest-pycharm>=0.7.0,<0.8",
+]
+examples = [
+    "pytest>=7.2.0,<8",
+    "pytest-cov>=4.0.0,<5",
+    "coverage[toml]>=7.0.1,<8",
+    "black>=22.12.0,<23",
+    "flake8>=6.0.0,<7",
+    "flake8-import-order>=0.18.2,<0.19",
+    "mypy>=0.991,<0.992",
+    "typeguard>=2.13.3,<3",
+    "pytest-pycharm>=0.7.0,<0.8",
+]
+
+[tool.uv]
+default-groups = [
+    "dev",
+    "examples",
+]
+
+[tool.uv.build-backend]
+module-name = ["stratified_models"]
+module-root = ""
+
+[build-system]
+requires = ["uv_build>=0.9.6,<0.10.0"]
+build-backend = "uv_build"
+
+[tool.coverage]
+config_file = ".coveragerc"
+#[tool.coverage.paths]
+#source = ["stratified_models", "*/site-packages"]
+#
+#[tool.coverage.run]
+#branch = true
+#source = ["stratified_models"]
+#omit = ["stratified_models/models.py", "stratified_models/tests/data_generators.py"]
+#
+#[tool.coverage.report]
+#show_missing = true
+#fail_under = 100
+#exclude_lines = [
+#    "pragma: no cover",
+##    "def __repr__",
+##    "if self.debug:",
+##    "if settings.DEBUG",
+##    "raise AssertionError",
+#    "raise NotImplementedError",
+##    "if 0:",
+##    "if __name__ == .__main__.:",
+#]
+
+[tool.mypy]
+strict = true
+warn_unreachable = true
+pretty = true
+show_column_numbers = true
+show_error_codes = true
+show_error_context = true
+ignore_missing_imports = true
+plugins = [
+    "numpy.typing.mypy_plugin"
+    ]
+warn_unused_configs = true
+
+[[tool.mypy.overrides]]
+module = [
+    "pytest",
+    "nox_poetry",
+]
+ignore_missing_imports = true
+
+[tool.isort]
+profile = "black"
+
+[tool.pytest.ini_options]
+capture = "no"
