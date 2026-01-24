@@ -1,0 +1,250 @@
+import cvxpy as cp
+import numpy as np
+import pytest
+
+from stratified_models.simpler.scalar_function import (
+    L1,
+    NonNegativeIndicator,
+    SumOfSquares,
+    SumOfSquaresOverAffine,
+    TensorQuadForm,
+    Zero,
+    soft_threshold,
+)
+
+
+def _rng() -> np.random.Generator:
+    return np.random.default_rng(0)
+
+
+class _ConcreteL1(L1):
+    def cvxpy_expression(self, x: cp.Expression) -> cp.Expression:
+        return cp.norm1(x)
+
+
+class _ConcreteNonNegativeIndicator(NonNegativeIndicator):
+    def cvxpy_expression(self, x: cp.Expression) -> cp.Expression:  # noqa: ARG002
+        return cp.Constant(0.0)
+
+
+@pytest.mark.parametrize(
+    ("x", "thresh", "expected"),
+    [
+        (
+            np.array([-2.0, -1.0, 0.0, 1.0, 2.0]),
+            0.0,
+            np.array([-2.0, -1.0, 0.0, 1.0, 2.0]),
+        ),
+        (
+            np.array([-2.0, -1.0, 0.0, 1.0, 2.0]),
+            1.0,
+            np.array([-1.0, 0.0, 0.0, 0.0, 1.0]),
+        ),
+        (np.array([0.5, -0.5, 1.5, -1.5]), 1.0, np.array([0.0, 0.0, 0.5, -0.5])),
+    ],
+)
+def test_soft_threshold(x: np.ndarray, thresh: float, expected: np.ndarray) -> None:
+    out = soft_threshold(x, thresh)
+    assert np.allclose(out, expected, atol=0.0, rtol=0.0)
+
+
+@pytest.mark.parametrize(
+    ("v", "t"),
+    [
+        (np.array([-2.0, -0.5, 0.0, 0.5, 2.0]), 0.0),
+        (np.array([-2.0, -0.5, 0.0, 0.5, 2.0]), 0.75),
+    ],
+)
+def test_l1_prox_matches_soft_threshold(v: np.ndarray, t: float) -> None:
+    f = _ConcreteL1()
+    expected = v if t == 0.0 else soft_threshold(v, t)
+    assert np.allclose(f.prox(v=v, t=t), expected, atol=0.0, rtol=0.0)
+
+
+@pytest.mark.parametrize(
+    ("x", "expected"),
+    [
+        (np.array([0.0, 1.0, -2.0]), 3.0),
+        (np.array([[1.0, -1.0], [2.0, -3.0]]), 7.0),
+    ],
+)
+def test_l1_call_is_sum_abs(x: np.ndarray, expected: float) -> None:
+    f = _ConcreteL1()
+    assert abs(f(x) - expected) <= 1e-12
+
+
+@pytest.mark.parametrize(
+    ("x", "expected_value"),
+    [
+        (np.array([0.0, 1.0]), 0.0),
+        (np.array([0.0, -1.0]), float("inf")),
+        (np.array([[0.0, 2.0], [3.0, 4.0]]), 0.0),
+        (np.array([[0.0, 2.0], [3.0, -4.0]]), float("inf")),
+    ],
+)
+def test_non_negative_indicator_call(x: np.ndarray, expected_value: float) -> None:
+    f = _ConcreteNonNegativeIndicator()
+    val = f(x)
+    if np.isinf(expected_value):
+        assert np.isinf(val)
+        assert val > 0.0
+    else:
+        assert val == 0.0
+
+
+@pytest.mark.parametrize(
+    ("v", "expected"),
+    [
+        (np.array([-1.0, 0.0, 2.0]), np.array([0.0, 0.0, 2.0])),
+        (np.array([[-3.0, 1.0], [0.5, -0.25]]), np.array([[0.0, 1.0], [0.5, 0.0]])),
+    ],
+)
+def test_non_negative_indicator_prox_is_clipping(
+    v: np.ndarray, expected: np.ndarray
+) -> None:
+    f = _ConcreteNonNegativeIndicator()
+    out = f.prox(v=v, t=123.0)
+    assert np.allclose(out, expected, atol=0.0, rtol=0.0)
+
+
+@pytest.mark.parametrize(
+    ("shape", "t"),
+    [
+        (5, 0.0),
+        (5, 1.5),
+        ((2, 3), 0.0),
+        ((2, 3), 0.25),
+    ],
+)
+def test_sum_of_squares_call_and_prox(shape: int | tuple[int, ...], t: float) -> None:
+    rng = _rng()
+    x = rng.standard_normal(shape).astype(float)
+    f = SumOfSquares(shape=shape)
+
+    expected_value = float((x.ravel() @ x.ravel()) / 2)
+    assert abs(f(x) - expected_value) <= 1e-12
+
+    expected_prox = x / (1.0 + t)
+    assert np.allclose(f.prox(v=x, t=t), expected_prox, atol=1e-12, rtol=0.0)
+
+
+@pytest.mark.parametrize("shape", [1, 6, (2, 3)])
+def test_sum_of_squares_to_explicit_quadratic_is_consistent(
+    shape: int | tuple[int, ...],
+) -> None:
+    rng = _rng()
+    x = rng.standard_normal(shape).astype(float)
+    f = SumOfSquares(shape=shape)
+    q = f.to_explicit_quadratic()
+
+    x_flat = x.ravel()
+    assert abs(f(x) - q(x_flat)) <= 1e-12
+    assert np.allclose(q.c, np.zeros_like(q.c), atol=0.0, rtol=0.0)
+    assert q.d == 0.0
+
+
+def test_zero_is_zero_and_prox_is_identity() -> None:
+    rng = _rng()
+    x = rng.standard_normal(7).astype(float)
+    v = rng.standard_normal(7).astype(float)
+    f = Zero()
+
+    assert f(x) == 0.0
+    assert np.allclose(f.prox(v=v, t=0.0), v, atol=0.0, rtol=0.0)
+    assert np.allclose(f.prox(v=v, t=123.0), v, atol=0.0, rtol=0.0)
+
+    q = f.to_explicit_quadratic()
+    assert q.q.size() == 0
+    assert q(np.zeros(0)) == 0.0
+
+
+@pytest.mark.parametrize(
+    ("n", "m", "t"),
+    [
+        (4, 2, 0.0),
+        (4, 2, 0.25),
+        (7, 3, 1.5),
+    ],
+)
+def test_sum_of_squares_over_affine_prox_solves_ridge_system(
+    n: int, m: int, t: float
+) -> None:
+    rng = _rng()
+    a = rng.standard_normal((n, m)).astype(float)
+    b = rng.standard_normal(n).astype(float)
+    v = rng.standard_normal(m).astype(float)
+
+    f = SumOfSquaresOverAffine(a=a, b=b)
+    out = f.prox(v=v, t=t)
+
+    if t == 0.0:
+        assert np.allclose(out, v, atol=0.0, rtol=0.0)
+        return
+
+    lhs = t * (a.T @ a) + np.eye(m)
+    rhs = v + t * (a.T @ b)
+    expected = np.linalg.solve(lhs, rhs)
+    assert np.allclose(out, expected, atol=1e-10, rtol=0.0)
+
+
+@pytest.mark.parametrize(
+    ("n", "m"),
+    [
+        (5, 2),
+        (3, 3),
+    ],
+)
+def test_sum_of_squares_over_affine_to_explicit_quadratic_matches_value(
+    n: int, m: int
+) -> None:
+    rng = _rng()
+    a = rng.standard_normal((n, m)).astype(float)
+    b = rng.standard_normal(n).astype(float)
+    x = rng.standard_normal(m).astype(float)
+
+    f = SumOfSquaresOverAffine(a=a, b=b)
+    q = f.to_explicit_quadratic()
+    assert abs(f(x) - q(x)) <= 1e-12
+
+
+def _psd_matrix(dim: int, *, rng: np.random.Generator) -> np.ndarray:
+    b = rng.standard_normal((dim, dim)).astype(float)
+    return b.T @ b + 1e-3 * np.eye(dim)
+
+
+@pytest.mark.parametrize(
+    ("dims", "axis"),
+    [
+        ((2, 3), 0),
+        ((2, 3), 1),
+        ((2, 2, 3), 2),
+    ],
+)
+def test_tensor_quad_form_matches_explicit_quadratic_and_prox(
+    dims: tuple[int, ...], axis: int
+) -> None:
+    rng = _rng()
+    axis_dim = dims[axis]
+    a = _psd_matrix(axis_dim, rng=rng)
+    f = TensorQuadForm(axis=axis, dims=dims, a=a)
+
+    x = rng.standard_normal(dims).astype(float)
+    x_flat = x.ravel(order="C")
+    q = f.to_explicit_quadratic()
+    assert abs(f(x) - q(x_flat)) <= 1e-10
+
+    v = rng.standard_normal(dims).astype(float)
+    assert np.allclose(f.prox(v=v, t=0.0), v, atol=0.0, rtol=0.0)
+
+    t = 0.7
+    out = f.prox(v=v, t=t)
+
+    # Closed form: apply (t*a + I)^{-1} along `axis` for every fixed index tuple
+    # on the remaining axes.
+    m = t * a + np.eye(axis_dim)
+    v_moved = np.moveaxis(v, axis, -1)  # (..., axis_dim)
+    v_mat = v_moved.reshape((-1, axis_dim))
+    expected_mat = np.linalg.solve(m, v_mat.T).T
+    expected = np.moveaxis(expected_mat.reshape(v_moved.shape), -1, axis)
+
+    assert np.allclose(out, expected, atol=1e-8, rtol=0.0)

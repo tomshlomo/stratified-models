@@ -236,7 +236,7 @@ class StratifiedLogisticRegressionClassifier(Generic[F, RefitDataType]):
 
     def predict_proba(self, X: pd.DataFrame) -> Array:
         log_odds = self.estimator.predict(X)
-        p1 = scipy.special.expit(log_odds.values)[:, np.newaxis]
+        p1 = scipy.special.expit(log_odds.to_numpy())[:, np.newaxis]
         p0 = 1 - p1
         return np.hstack([p0, p1])
 

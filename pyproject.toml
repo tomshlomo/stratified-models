@@ -8,6 +8,7 @@ authors = [
 ]
 requires-python = ">=3.13"
 dependencies = [
+    "attrs>=25.4.0",
     "cvxpy>=1.7.5",
     "networkx>=3.6.1",
     "numpy>=2.4.1",
@@ -49,7 +50,9 @@ ignore = [
     "TC002",
     "TD002", # Missing author in TODO; try: `# TODO(<author_name>): ...` or `# TODO @<author_name>: ...`
     "ERA001", # Found commented-out code
-    "D205" # 1 blank line required between summary line and description
+    "D205", # 1 blank line required between summary line and description
+    "N803", # Argument name `X` should be lowercase
+    "COM812", # Missing trailing comma (handled by ruff formatter)
 ]
 
 

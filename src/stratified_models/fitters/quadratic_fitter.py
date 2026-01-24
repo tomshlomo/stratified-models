@@ -81,8 +81,8 @@ class QuadraticProblemFitter(
         for node, x, y in problem.node_data_iter():
             i = problem.get_node_flat_index(node)
             loss = problem.loss_factory.build_loss_function(
-                x[problem.regression_features].values,
-                y.values,
+                x[problem.regression_features].to_numpy(),
+                y.to_numpy(),
             ).to_explicit_quadratic()
             loss_components[i] = loss
         cost_components.append(

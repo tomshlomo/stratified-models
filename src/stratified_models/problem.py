@@ -42,8 +42,8 @@ class StratifiedLinearRegressionProblem[F: ScalarFunction[Array]]:
         for node, x, y in self.node_data_iter():
             yield (
                 self.loss_factory.build_loss_function(
-                    x[self.regression_features].values,
-                    y.values,
+                    x[self.regression_features].to_numpy(),
+                    y.to_numpy(),
                 ),
                 node,
             )
@@ -96,7 +96,8 @@ class StratifiedLinearRegressionProblem[F: ScalarFunction[Array]]:
             # `node` is always a tuple (see `node_data_iter`). For a single graph this
             # means a 1-tuple like `(z,)`.
             #
-            # - If `theta.df.index` is a MultiIndex (the common case via `Theta.from_array`)
+            # - If `theta.df.index` is a MultiIndex (the common case via
+            # `Theta.from_array`)
             #   we want to index with the tuple.
             # - If a user constructs `Theta` manually with a single-level index (as the
             #   tests do), pandas treats a tuple as a listlike indexer and returns a 2D
@@ -105,9 +106,9 @@ class StratifiedLinearRegressionProblem[F: ScalarFunction[Array]]:
             if not isinstance(theta.df.index, pd.MultiIndex) and len(node) == 1:
                 row_key = node[0]
 
-            cost += loss(theta.df.loc[row_key, :].values)
+            cost += loss(theta.df.loc[row_key, :].to_numpy())
         for reg, gamma in self.regularizers():
-            cost += gamma * reg(theta.df.values)
+            cost += gamma * reg(theta.df.to_numpy())
         for lap, gamma in self.laplacians():
             cost += gamma * lap(theta.as_array())
         return cost
@@ -119,7 +120,7 @@ class Theta:
     shape: tuple[int, ...]
 
     def as_array(self) -> Array:
-        return self.df.values.reshape(self.shape)  # type:ignore[no-any-return]
+        return self.df.to_numpy().reshape(self.shape)  # type:ignore[no-any-return]
 
     @classmethod
     def _get_df_from_array(
@@ -152,13 +153,13 @@ class Theta:
 
     def predict(self, x: pd.DataFrame) -> pd.Series:
         rows = pd.MultiIndex.from_arrays(
-            x.loc[:, self.stratification_features()].values.T,
+            x.loc[:, self.stratification_features()].to_numpy().T,
         )
         theta_aligned = self.df.loc[rows, :]
         y = np.einsum(
             "nm,nm->n",
-            x.loc[:, self.regression_features()].values,
-            theta_aligned.values,
+            x.loc[:, self.regression_features()].to_numpy(),
+            theta_aligned.to_numpy(),
         )
         return pd.Series(y, index=x.index)
 

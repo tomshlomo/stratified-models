@@ -231,7 +231,27 @@ class LogisticLossFactory(LossFactory[LogisticOverLinear]):
         x: DenseOrSparseMatrix,
         y: Array,
     ) -> LogisticOverLinear:
-        y = y * 2 - 1  # from {0,1} to {-1,1}
-        y = -y[:, np.newaxis]
-        a = x.multiply(y) if isinstance(x, scipy.sparse.spmatrix) else x * y
+        # `y` may arrive as a NumPy array (common) or as a pandas Series (e.g. when
+        # slicing `problem.y[rows]`). Pandas disallows `y[:, None]`-style indexing,
+        # so normalize to a NumPy array first.
+        y_arr = np.asarray(y)
+
+        # Support labels in either {0, 1} or {-1, 1}.
+        y_vals = set(np.unique(y_arr).tolist())
+        if y_vals.issubset({0, 1}):
+            y_signed = y_arr * 2 - 1  # from {0,1} to {-1,1}
+        elif y_vals.issubset({-1, 1}):
+            y_signed = y_arr
+        else:
+            raise ValueError(
+                "LogisticLossFactory expects binary labels in {0,1} or {-1,1}, "
+                f"got values {sorted(y_vals)}"
+            )
+
+        y_signed = -y_signed[:, np.newaxis]
+        a = (
+            x.multiply(y_signed)
+            if isinstance(x, scipy.sparse.spmatrix)
+            else x * y_signed
+        )
         return LogisticOverLinear(a=a)

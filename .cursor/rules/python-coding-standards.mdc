@@ -1,0 +1,38 @@
+---
+globs: *.py
+alwaysApply: true
+description: Python Coding Standards, including type annotations, data models, function design, and testing standards
+---
+# Python Coding Standards
+
+## Key Principles
+- Write working and clean code, while prioritizing code readability
+- Only write code comments if the implementation is vague or non-trivial. In all other cases, the code should explain itself
+- Prefer iteration and modularization over code duplication. Prioritize code re-use in your designs
+- Use descriptive variable names with auxiliary verbs (e.g., is_active, has_permission)
+- Write unittests for new modules. Make sure the unittests cover all new code, and account for reasonable edge cases in code flow
+- Prefer immutability over mutable state
+- Avoid global mutable state
+- Avoid making circular references that would have to be cleaned up by the garbage collector
+
+## Type Annotations
+- Use type hints for all function signatures
+- Prefer `object` over `Any` for improved type safety
+- Avoid using `# type: ignore` comments - fix the underlying type issues instead
+- Use immutable abstract types like `Sequence` and `Mapping` instead of mutable ones like `list` and `dict`
+
+## Data Models
+- Use Protocols for dependencies inversion and decoupling code when possible
+- Prefer attrs dataclasses over regular classes, and preffer frozen attrs classes whenever possible.
+- Use `@frozen(kw_only=True)`
+- **Never use attrs (`@define` or `@frozen`) for classes that inherit from PyTorch or Lightning classes** (e.g., `nn.Module`, `LightningModule`, `LightningDataModule`, `BaseTransform`). These frameworks have "magic" for automatic parameter discovery and module registration that conflicts with attrs. Use regular classes with `__init__` methods instead.
+- When using `@define` (not `@frozen`), use simple assignments in `__attrs_post_init__`, not `object.__setattr__`. The `object.__setattr__` trick is only needed for frozen classes.
+- Never use `# type: ignore` comments. Either fix the underlying type issues properly, or add an `assert` statement to help the type checker understand the code.
+
+## Function Design
+- Avoid default values in functions/methods signatures
+- Avoid hiding logic in constructors
+- Use iterables, generators and `yield` when possible to avoid unnecessary allocations
+- If a function has many arguments, add `*` to force callers specify argument names
+- Distinguish between private and public methods
+- Avoid hard coded constants in methods. Use class variables with clear names instead, or module-level variables

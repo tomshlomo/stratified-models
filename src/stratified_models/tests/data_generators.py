@@ -44,7 +44,10 @@ class DataGenerator:
         graph = cartesian_product(graph for graph, _ in self.graphs)
         a = nx.adjacency_matrix(graph)
         a += scipy.sparse.eye(k)
-        a = scipy.sparse.diags(1 / a.sum(axis=0).A.ravel()) * a
+        # SciPy sparse `.sum(axis=...)` may return a `numpy.ndarray` (newer SciPy)
+        # or a `numpy.matrix` (older SciPy). Normalize to a 1D ndarray.
+        col_sums = np.asarray(a.sum(axis=0)).ravel()
+        a = scipy.sparse.diags(1 / col_sums) * a
         for _ in range(self.smoothing_iters):
             theta = a @ theta
 

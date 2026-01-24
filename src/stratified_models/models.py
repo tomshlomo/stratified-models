@@ -43,7 +43,7 @@
 #         ]:
 #             node = nest(flat_node) if len(self.graphs) > 1 else flat_node
 #             data[node] = NodeData(
-#                 x=df_slice.values,
+#                 x=df_slice.to_numpy(),
 #                 y=y[df_slice.index],
 #             )
 #         graph = self.get_graph()
@@ -64,5 +64,5 @@
 #         y = pd.Series(index=X.index, data=0.0)
 #         for z, X2 in X.groupby(
 #         self.stratification_features())[self.regression_columns]:
-#             y[X2.index] = X2.values @ self.theta.df.loc[z, :].values
+#             y[X2.index] = X2.to_numpy() @ self.theta.df.loc[z, :].to_numpy()
 #         return y

@@ -84,11 +84,11 @@ class Fitter(Protocol[F, RefitDataType]):
 #         loss = 0.0
 #         theta_df = theta.df.set_index(pd.MultiIndex.from_tuples(theta.df.index))
 #         for node, node_data in problem.nodes_data.items():
-#             y_pred = node_data.x @ theta_df.loc[node, :].values
+#             y_pred = node_data.x @ theta_df.loc[node, :].to_numpy()
 #             d = y_pred - node_data.y
 #             loss += d @ d
-#         local_reg = theta.df.values.ravel() @ theta.df.values.ravel() * problem.l2_reg
-#         laplace_reg = problem.graph.laplacian_quad_form(theta_df.values)
+#         local_reg = theta.df.to_numpy().ravel() @ theta.df.to_numpy().ravel() * problem.l2_reg
+#         laplace_reg = problem.graph.laplacian_quad_form(theta_df.to_numpy())
 #         return Costs(
 #             loss=loss,
 #             local_regularization=local_reg,

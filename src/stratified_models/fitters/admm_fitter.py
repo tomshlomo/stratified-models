@@ -213,7 +213,7 @@ class ADMMFitter(Fitter[ProxableScalarFunction[Array], ADMMRefitData]):
         num_of_clusters = ceil(num_of_nodes / max_nodes_per_cluster)
 
         shape = (problem.n, max_nodes_per_cluster * problem.m)
-        data = problem.x[problem.regression_features].values.flatten()
+        data = problem.x[problem.regression_features].to_numpy().flatten()
         indices = np.add.outer(
             np.mod(node_index, max_nodes_per_cluster) * problem.m,
             np.arange(problem.m),
