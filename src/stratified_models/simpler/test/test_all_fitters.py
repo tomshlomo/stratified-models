@@ -3,10 +3,20 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from stratified_models.simpler.fit import AbstractProblem, CVXPYSolver, Hyperparameters
+from stratified_models.simpler.fit import (
+    AbstractProblem,
+    CVXPYSolver,
+    Hyperparameters,
+    Solver,
+)
 from stratified_models.simpler.graph import NetworkXRegularizationGraph
 from stratified_models.simpler.loss import SumOfSquaresLoss
 from stratified_models.simpler.model import StartifiedModel, Stratification
+from stratified_models.simpler.quadratic_fitter import (
+    CGSolver,
+    DirectSolver,
+    QuadraticSolver,
+)
 from stratified_models.simpler.scalar_function import ScalarFunction, SumOfSquares
 
 
@@ -73,12 +83,19 @@ def _make_problem_two_graphs(
 @pytest.mark.parametrize("reg1", [1e-12, 1e8])
 @pytest.mark.parametrize("reg2", [1e-12, 1e8])
 @pytest.mark.parametrize("l2reg", [1e-12, 1e8])
-def test_fit(reg1: float, reg2: float, l2reg: float) -> None:
+@pytest.mark.parametrize(
+    "solver",
+    [
+        CVXPYSolver(),
+        QuadraticSolver(solver=DirectSolver()),
+        QuadraticSolver(solver=CGSolver()),
+    ],
+)
+def test_fit(reg1: float, reg2: float, l2reg: float, solver: Solver[object]) -> None:
     m = 2
     problem, hyper = _make_problem_two_graphs(
         reg1=reg1, reg2=reg2, l2_reg=l2reg, m=m, n=3
     )
-    solver = CVXPYSolver()
 
     model, _compiled = solver.compile_and_solve(problem, hyper)
     assert isinstance(model, StartifiedModel)
@@ -110,7 +127,15 @@ def test_fit(reg1: float, reg2: float, l2reg: float) -> None:
             assert np.allclose(theta1, theta2, atol=1e-4, rtol=1e-6)
 
 
-def test_ridge_equivalence_when_graph_regs_are_small() -> None:
+@pytest.mark.parametrize(
+    "solver",
+    [
+        CVXPYSolver(),
+        QuadraticSolver(solver=DirectSolver()),
+        QuadraticSolver(solver=CGSolver()),
+    ],
+)
+def test_ridge_equivalence_when_graph_regs_are_small(solver: Solver[object]) -> None:
     m = 2
     n = 3
     reg1 = 1e-12
@@ -120,7 +145,6 @@ def test_ridge_equivalence_when_graph_regs_are_small() -> None:
     problem, hyper = _make_problem_two_graphs(
         reg1=reg1, reg2=reg2, l2_reg=l2reg, m=m, n=n
     )
-    solver = CVXPYSolver()
     model, _compiled = solver.compile_and_solve(problem, hyper)
 
     # With (effectively) no graph regularization, the solution decouples per-node
