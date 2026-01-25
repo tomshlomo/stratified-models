@@ -1,5 +1,6 @@
+import jax
+import jax.numpy as jnp
 import networkx as nx
-import numpy as np
 import pandas as pd
 import pytest
 
@@ -15,8 +16,10 @@ from stratified_models.simpler.model import StartifiedModel, Stratification
 from stratified_models.simpler.scalar_function import ScalarFunction, SumOfSquares
 
 
-def _design_matrix(n: int, m: int) -> np.ndarray:
-    x = np.power.outer(np.arange(n, dtype=float), np.arange(m, dtype=float))
+def _design_matrix(n: int, m: int) -> jax.Array:
+    a = jnp.arange(n, dtype=float)
+    b = jnp.arange(m, dtype=float)
+    x = a[:, None] ** b[None, :]
     return x[:, :1] if m == 1 else x
 
 
@@ -41,21 +44,21 @@ def _make_problem_two_graphs(
 
     frames = []
     y_parts = []
-    ones = np.ones(m)
+    ones = jnp.ones(m)
     for s0 in strat_0.index:
         for s1 in strat_1.index:
             # Two clusters to make Laplacian regularization observable.
             scale = 1.0 if int(s0) == 0 else -3.0
             beta = scale * ones
 
-            df = pd.DataFrame(x_block, columns=regression_features)
+            df = pd.DataFrame(jax.device_get(x_block), columns=regression_features)
             df["strat_0"] = s0
             df["strat_1"] = s1
             frames.append(df)
             y_parts.append(x_block @ beta)
 
     x = pd.concat(frames, ignore_index=True)
-    y = pd.Series(np.concatenate(y_parts), index=x.index)
+    y = pd.Series(jax.device_get(jnp.concatenate(y_parts)), index=x.index)
 
     num_nodes = graph1.size * graph2.size
     regularizers: dict[str, ScalarFunction] = {"l2": SumOfSquares(shape=(num_nodes, m))}
@@ -96,7 +99,7 @@ def test_fit(reg1: float, reg2: float, l2reg: float, solver: Solver[object]) -> 
     objectives = problem.objectives(model)
 
     if l2reg >= 1e7:
-        assert float(np.linalg.norm(model.theta)) <= 1e-2
+        assert float(jnp.linalg.norm(jnp.asarray(model.theta))) <= 1e-2
 
     # With very large graph regularization, the corresponding Laplacian energy
     # should be (close to) zero.
@@ -107,7 +110,11 @@ def test_fit(reg1: float, reg2: float, l2reg: float, solver: Solver[object]) -> 
         for s1 in range(3):
             theta0 = model.theta_at_node((0, s1))
             theta1 = model.theta_at_node((1, s1))
-            assert np.allclose(theta0, theta1, atol=2e-4, rtol=1e-6)
+            assert bool(
+                jnp.allclose(
+                    jnp.asarray(theta0), jnp.asarray(theta1), atol=2e-4, rtol=1e-6
+                )
+            )
     if reg2 >= 1e7:
         assert objectives.laplacians["strat_1"] <= 1e-6
         # Strong Laplacian on `strat_1` should equalize theta across `strat_1`
@@ -116,8 +123,16 @@ def test_fit(reg1: float, reg2: float, l2reg: float, solver: Solver[object]) -> 
             theta0 = model.theta_at_node((s0, 0))
             theta1 = model.theta_at_node((s0, 1))
             theta2 = model.theta_at_node((s0, 2))
-            assert np.allclose(theta0, theta1, atol=2e-4, rtol=1e-6)
-            assert np.allclose(theta1, theta2, atol=2e-4, rtol=1e-6)
+            assert bool(
+                jnp.allclose(
+                    jnp.asarray(theta0), jnp.asarray(theta1), atol=2e-4, rtol=1e-6
+                )
+            )
+            assert bool(
+                jnp.allclose(
+                    jnp.asarray(theta1), jnp.asarray(theta2), atol=2e-4, rtol=1e-6
+                )
+            )
 
 
 @pytest.mark.parametrize(
@@ -141,11 +156,13 @@ def test_ridge_equivalence_when_graph_regs_are_small(solver: Solver[object]) -> 
     # With (effectively) no graph regularization, the solution decouples per-node
     # and matches ridge regression for each group.
     for node, x_slice, y_slice in problem.group_data():
-        x = x_slice[problem.regression_features].to_numpy()
-        y = y_slice.to_numpy()
-        beta_ridge = np.linalg.solve(
-            x.T @ x + l2reg * np.eye(m),
+        x = jnp.asarray(x_slice[problem.regression_features].to_numpy())
+        y = jnp.asarray(y_slice.to_numpy())
+        beta_ridge = jnp.linalg.solve(
+            x.T @ x + l2reg * jnp.eye(m),
             x.T @ y,
         )
         beta_model = model.theta_at_node(node)
-        assert np.allclose(beta_model, beta_ridge, atol=1e-4, rtol=1e-6)
+        assert bool(
+            jnp.allclose(jnp.asarray(beta_model), beta_ridge, atol=1e-4, rtol=1e-6)
+        )

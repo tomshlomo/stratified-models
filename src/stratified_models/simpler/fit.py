@@ -4,6 +4,7 @@ from functools import cached_property
 
 import attrs
 import cvxpy as cp
+import jax.numpy as jnp
 import pandas as pd
 
 from stratified_models.simpler.graph import RegularizationGraph
@@ -68,7 +69,10 @@ class AbstractProblem:
         for node, x, y in self.group_data():
             yield (
                 node,
-                self.loss.build(x[self.regression_features].to_numpy(), y.to_numpy()),
+                self.loss.build(
+                    jnp.asarray(x[self.regression_features].to_numpy()),
+                    jnp.asarray(y.to_numpy()),
+                ),
             )
 
     def laplacians(self) -> Iterable[tuple[str, ScalarFunction]]:
@@ -164,7 +168,7 @@ class CVXPYSolver(Solver[CompiledCVXPYProblem]):
 
         compiled_problem.cvxpy_problem.solve(verbose=self.verbose)
         return StartifiedModel(
-            theta=compiled_problem.theta.value,  # ty:ignore[invalid-argument-type]
+            theta=jnp.asarray(compiled_problem.theta.value),
             shape=compiled_problem.theta_shape,
         )
 

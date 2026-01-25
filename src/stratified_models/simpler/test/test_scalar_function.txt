@@ -1,6 +1,6 @@
-import cvxpy as cp
 import numpy as np
 import pytest
+import cvxpy as cp
 
 from stratified_models.simpler.scalar_function import (
     L1,
@@ -130,7 +130,7 @@ def test_sum_of_squares_call_and_prox(shape: int | tuple[int, ...], t: float) ->
 
 @pytest.mark.parametrize("shape", [1, 6, (2, 3)])
 def test_sum_of_squares_to_explicit_quadratic_is_consistent(
-    shape: int | tuple[int, ...],
+    shape: int | tuple[int, ...]
 ) -> None:
     rng = _rng()
     x = rng.standard_normal(shape).astype(float)
