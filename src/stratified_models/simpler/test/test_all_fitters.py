@@ -4,16 +4,28 @@ import networkx as nx
 import pandas as pd
 import pytest
 
-from stratified_models.simpler.fit import (
-    AbstractProblem,
-    CVXPYSolver,
-    Hyperparameters,
-    Solver,
-)
 from stratified_models.simpler.graph import NetworkXRegularizationGraph
 from stratified_models.simpler.loss import SumOfSquaresLoss
 from stratified_models.simpler.model import StartifiedModel, Stratification
 from stratified_models.simpler.scalar_function import ScalarFunction, SumOfSquares
+from stratified_models.simpler.solvers import (
+    AbstractProblem,
+    CGPSDSolver,
+    CVXPYSolver,
+    DirectPSDSolver,
+    Hyperparameters,
+    NewtonSolver,
+    SolveInfo,
+    Solver,
+)
+
+ALL_SOLVERS = (
+    CVXPYSolver(),
+    NewtonSolver(),
+    NewtonSolver(psd_solver=CGPSDSolver()),
+    NewtonSolver.for_quadratic(DirectPSDSolver()),
+    NewtonSolver.for_quadratic(CGPSDSolver()),
+)
 
 
 def _design_matrix(n: int, m: int) -> jax.Array:
@@ -83,17 +95,17 @@ def _make_problem_two_graphs(
 @pytest.mark.parametrize("l2reg", [1e-12, 1e8])
 @pytest.mark.parametrize(
     "solver",
-    [
-        CVXPYSolver(),
-    ],
+    ALL_SOLVERS,
 )
-def test_fit(reg1: float, reg2: float, l2reg: float, solver: Solver[object]) -> None:
+def test_fit(
+    reg1: float, reg2: float, l2reg: float, solver: Solver[object, SolveInfo]
+) -> None:
     m = 4
     problem, hyper = _make_problem_two_graphs(
         reg1=reg1, reg2=reg2, l2_reg=l2reg, m=m, n=5
     )
 
-    model, _compiled = solver.compile_and_solve(problem, hyper)
+    model, _info, _compiled = solver.compile_and_solve(problem, hyper)
     assert isinstance(model, StartifiedModel)
 
     objectives = problem.objectives(model)
@@ -104,7 +116,7 @@ def test_fit(reg1: float, reg2: float, l2reg: float, solver: Solver[object]) -> 
     # With very large graph regularization, the corresponding Laplacian energy
     # should be (close to) zero.
     if reg1 >= 1e7:
-        assert objectives.laplacians["strat_0"] <= 1e-6
+        assert float(objectives.laplacians["strat_0"]) <= 1e-6
         # Strong Laplacian on `strat_0` should equalize theta across `strat_0`
         # for each fixed `strat_1`.
         for s1 in range(3):
@@ -116,7 +128,7 @@ def test_fit(reg1: float, reg2: float, l2reg: float, solver: Solver[object]) -> 
                 )
             )
     if reg2 >= 1e7:
-        assert objectives.laplacians["strat_1"] <= 1e-6
+        assert float(objectives.laplacians["strat_1"]) <= 1e-6
         # Strong Laplacian on `strat_1` should equalize theta across `strat_1`
         # for each fixed `strat_0`.
         for s0 in range(2):
@@ -137,11 +149,11 @@ def test_fit(reg1: float, reg2: float, l2reg: float, solver: Solver[object]) -> 
 
 @pytest.mark.parametrize(
     "solver",
-    [
-        CVXPYSolver(),
-    ],
+    ALL_SOLVERS,
 )
-def test_ridge_equivalence_when_graph_regs_are_small(solver: Solver[object]) -> None:
+def test_ridge_equivalence_when_graph_regs_are_small(
+    solver: Solver[object, SolveInfo],
+) -> None:
     m = 2
     n = 3
     reg1 = 1e-12
@@ -151,7 +163,7 @@ def test_ridge_equivalence_when_graph_regs_are_small(solver: Solver[object]) -> 
     problem, hyper = _make_problem_two_graphs(
         reg1=reg1, reg2=reg2, l2_reg=l2reg, m=m, n=n
     )
-    model, _compiled = solver.compile_and_solve(problem, hyper)
+    model, _info, _compiled = solver.compile_and_solve(problem, hyper)
 
     # With (effectively) no graph regularization, the solution decouples per-node
     # and matches ridge regression for each group.
@@ -166,3 +178,23 @@ def test_ridge_equivalence_when_graph_regs_are_small(solver: Solver[object]) -> 
         assert bool(
             jnp.allclose(jnp.asarray(beta_model), beta_ridge, atol=1e-4, rtol=1e-6)
         )
+
+
+def test_all_solvers_achieve_same_objective_value() -> None:
+    problem, hyper = _make_problem_two_graphs(
+        reg1=1.0,
+        reg2=2.0,
+        l2_reg=0.3,
+        m=4,
+        n=5,
+    )
+
+    totals: list[float] = []
+    for solver in ALL_SOLVERS:
+        model, _info, _compiled = solver.compile_and_solve(problem, hyper)
+        total = problem.objectives(model).total(hyper)
+        totals.append(float(total))
+
+    baseline = totals[0]
+    for value in totals[1:]:
+        assert abs(value - baseline) <= 1e-5 * max(1.0, abs(baseline))

@@ -1,17 +1,20 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections.abc import Callable
+from functools import cached_property
 
 import attrs
 import cvxpy as cp
 import jax
 import jax.numpy as jnp
+from jax.experimental.sparse import BCOO
 from scipy.sparse import sparray
 
 
 class ScalarFunction(ABC):
     @abstractmethod
-    def __call__(self, x: jax.Array) -> float:
+    def __call__(self, x: jax.Array) -> jax.Array:
         pass
 
 
@@ -24,10 +27,18 @@ class CVXPYScalarFunction(ScalarFunction, ABC):
         pass
 
 
+class QuadraticScalarFunction(ScalarFunction, ABC):
+    def gradient(self) -> Callable[[jax.Array], jax.Array]:
+        return jax.grad(self.__call__)
+
+    def hessian(self) -> Callable[[jax.Array], jax.Array]:
+        return jax.hessian(self.__call__)
+
+
 @attrs.frozen(kw_only=True)
-class Zero(ScalarFunction):
-    def __call__(self, x: jax.Array) -> float:  # noqa: ARG002
-        return 0.0
+class Zero(QuadraticScalarFunction, CVXPYScalarFunction):
+    def __call__(self, x: jax.Array) -> jax.Array:  # noqa: ARG002
+        return jnp.asarray(0.0)
 
     def cvxpy_expression(
         self,
@@ -37,16 +48,16 @@ class Zero(ScalarFunction):
 
 
 @attrs.frozen(kw_only=True)
-class SumOfSquares(CVXPYScalarFunction):
+class SumOfSquares(QuadraticScalarFunction, CVXPYScalarFunction):
     """x |-> x'x/2
     x in RefitDataType^m.
     """
 
     shape: int | tuple[int, ...]
 
-    def __call__(self, x: jax.Array) -> float:
+    def __call__(self, x: jax.Array) -> jax.Array:
         x_flat = jnp.ravel(x)
-        return float((x_flat @ x_flat) / 2)
+        return (x_flat @ x_flat) / 2
 
     def cvxpy_expression(
         self,
@@ -56,14 +67,14 @@ class SumOfSquares(CVXPYScalarFunction):
 
 
 @attrs.frozen(kw_only=True)
-class SumOfSquaresOverAffine(CVXPYScalarFunction):
+class SumOfSquaresOverAffine(QuadraticScalarFunction, CVXPYScalarFunction):
     a: jax.Array
     b: jax.Array
 
-    def __call__(self, x: jax.Array) -> float:
+    def __call__(self, x: jax.Array) -> jax.Array:
         residual = self.residual(x)
         residual_flat = jnp.ravel(residual)
-        return float((residual_flat @ residual_flat) / 2)
+        return (residual_flat @ residual_flat) / 2
 
     def residual(self, x: jax.Array) -> jax.Array:
         return self.a @ x - self.b
@@ -76,20 +87,23 @@ class SumOfSquaresOverAffine(CVXPYScalarFunction):
 
 
 @attrs.frozen(kw_only=True)
-class SparseQuadraticForm(CVXPYScalarFunction):
+class SparseQuadraticForm(QuadraticScalarFunction, CVXPYScalarFunction):
     a: sparray
     axis: int
     dims: tuple[int, ...]
 
-    def __call__(self, x: jax.Array) -> float:
+    @cached_property
+    def a_jax(self) -> BCOO:
+        # Convert the (CPU) SciPy Laplacian to a JAX sparse matrix once.
+        return BCOO.from_scipy_sparse(self.a)
+
+    def __call__(self, x: jax.Array) -> jax.Array:
         assert x.shape == self.dims
-        # `self.a` is a SciPy sparse matrix (CPU-only), so we evaluate this
-        # expression on host arrays even if `x` is a JAX array.
         x_arr = jnp.swapaxes(x, self.axis, -1)
         x_arr = jnp.reshape(x_arr, (-1, x_arr.shape[-1]))
-        x_np = jax.device_get(x_arr)
-        y_np = x_np @ self.a
-        return float(x_np.ravel() @ y_np.ravel()) / 2
+        # Quadratic form: sum_i x_i^T L x_i / 2
+        y = (self.a_jax @ x_arr.T).T
+        return jnp.sum(x_arr * y) / 2
 
     def cvxpy_expression(
         self,
