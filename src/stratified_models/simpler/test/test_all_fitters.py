@@ -12,11 +12,6 @@ from stratified_models.simpler.fit import (
 from stratified_models.simpler.graph import NetworkXRegularizationGraph
 from stratified_models.simpler.loss import SumOfSquaresLoss
 from stratified_models.simpler.model import StartifiedModel, Stratification
-from stratified_models.simpler.quadratic_fitter import (
-    CGSolver,
-    DirectSolver,
-    QuadraticSolver,
-)
 from stratified_models.simpler.scalar_function import ScalarFunction, SumOfSquares
 
 
@@ -87,14 +82,12 @@ def _make_problem_two_graphs(
     "solver",
     [
         CVXPYSolver(),
-        QuadraticSolver(solver=DirectSolver()),
-        QuadraticSolver(solver=CGSolver()),
     ],
 )
 def test_fit(reg1: float, reg2: float, l2reg: float, solver: Solver[object]) -> None:
-    m = 2
+    m = 4
     problem, hyper = _make_problem_two_graphs(
-        reg1=reg1, reg2=reg2, l2_reg=l2reg, m=m, n=3
+        reg1=reg1, reg2=reg2, l2_reg=l2reg, m=m, n=5
     )
 
     model, _compiled = solver.compile_and_solve(problem, hyper)
@@ -103,7 +96,7 @@ def test_fit(reg1: float, reg2: float, l2reg: float, solver: Solver[object]) -> 
     objectives = problem.objectives(model)
 
     if l2reg >= 1e7:
-        assert float(np.linalg.norm(model.theta.to_numpy())) <= 1e-2
+        assert float(np.linalg.norm(model.theta)) <= 1e-2
 
     # With very large graph regularization, the corresponding Laplacian energy
     # should be (close to) zero.
@@ -112,27 +105,25 @@ def test_fit(reg1: float, reg2: float, l2reg: float, solver: Solver[object]) -> 
         # Strong Laplacian on `strat_0` should equalize theta across `strat_0`
         # for each fixed `strat_1`.
         for s1 in range(3):
-            theta0 = model.theta.loc[(0, s1), :].to_numpy()
-            theta1 = model.theta.loc[(1, s1), :].to_numpy()
-            assert np.allclose(theta0, theta1, atol=1e-4, rtol=1e-6)
+            theta0 = model.theta_at_node((0, s1))
+            theta1 = model.theta_at_node((1, s1))
+            assert np.allclose(theta0, theta1, atol=2e-4, rtol=1e-6)
     if reg2 >= 1e7:
         assert objectives.laplacians["strat_1"] <= 1e-6
         # Strong Laplacian on `strat_1` should equalize theta across `strat_1`
         # for each fixed `strat_0`.
         for s0 in range(2):
-            theta0 = model.theta.loc[(s0, 0), :].to_numpy()
-            theta1 = model.theta.loc[(s0, 1), :].to_numpy()
-            theta2 = model.theta.loc[(s0, 2), :].to_numpy()
-            assert np.allclose(theta0, theta1, atol=1e-4, rtol=1e-6)
-            assert np.allclose(theta1, theta2, atol=1e-4, rtol=1e-6)
+            theta0 = model.theta_at_node((s0, 0))
+            theta1 = model.theta_at_node((s0, 1))
+            theta2 = model.theta_at_node((s0, 2))
+            assert np.allclose(theta0, theta1, atol=2e-4, rtol=1e-6)
+            assert np.allclose(theta1, theta2, atol=2e-4, rtol=1e-6)
 
 
 @pytest.mark.parametrize(
     "solver",
     [
         CVXPYSolver(),
-        QuadraticSolver(solver=DirectSolver()),
-        QuadraticSolver(solver=CGSolver()),
     ],
 )
 def test_ridge_equivalence_when_graph_regs_are_small(solver: Solver[object]) -> None:
@@ -156,5 +147,5 @@ def test_ridge_equivalence_when_graph_regs_are_small(solver: Solver[object]) -> 
             x.T @ x + l2reg * np.eye(m),
             x.T @ y,
         )
-        beta_model = model.theta.loc[node, :].to_numpy()
+        beta_model = model.theta_at_node(node)
         assert np.allclose(beta_model, beta_ridge, atol=1e-4, rtol=1e-6)

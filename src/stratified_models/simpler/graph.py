@@ -4,11 +4,13 @@ from functools import cached_property
 
 import attrs
 import networkx as nx
-import numpy as np
+from scipy.sparse import sparray
 
-from stratified_models.linear_operator import Array
 from stratified_models.simpler.model import Stratification
-from stratified_models.simpler.scalar_function import ScalarFunction, TensorQuadForm
+from stratified_models.simpler.scalar_function import (
+    ScalarFunction,
+    SparseQuadraticForm,
+)
 
 
 class RegularizationGraph(ABC):
@@ -37,16 +39,11 @@ class NetworkXRegularizationGraph(RegularizationGraph):
     weight_key: str = "weight"
 
     @cached_property
-    def laplacian_matrix(self) -> Array:
-        mat = nx.laplacian_matrix(self.graph, weight=self.weight_key)
-        # `networkx` returns a scipy sparse matrix/array; `TensorQuadForm` expects
-        # a dense ndarray.
-        if hasattr(mat, "toarray"):
-            mat = mat.toarray()
-        return np.asarray(mat, dtype=float)
+    def laplacian_matrix(self) -> sparray:
+        return nx.laplacian_matrix(self.graph, weight=self.weight_key)
 
-    def laplacian(self, axis: int, dims: tuple[int, ...]) -> TensorQuadForm:
-        return TensorQuadForm(
+    def laplacian(self, axis: int, dims: tuple[int, ...]) -> SparseQuadraticForm:
+        return SparseQuadraticForm(
             a=self.laplacian_matrix,
             axis=axis,
             dims=dims,

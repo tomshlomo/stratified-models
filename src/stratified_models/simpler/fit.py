@@ -73,31 +73,27 @@ class AbstractProblem:
 
     def laplacians(self) -> Iterable[tuple[str, ScalarFunction]]:
         for i, graph in enumerate(self.graphs):
-            # `ThetaShape.dims` is `(m, *graph_sizes)`, so stratifications start
-            # at axis 1.
             yield (
                 str(graph.name),
                 graph.laplacian(
-                    axis=i + 1,
-                    dims=self.theta_shape.dims,
+                    axis=i,
+                    dims=self.theta_shape.array_shape,
                 ),
             )
 
     def objectives(self, model: StartifiedModel) -> Objectives:
         loss_value = 0.0
         for node, loss in self.group_losses():
-            theta_node = model.theta.loc[node, :].to_numpy()
+            theta_node = model.theta_at_node(node)
             loss_value += loss(theta_node)  # type:ignore[operator]
 
-        theta_matrix = model.as_flat_numpy_array()
         regularizers = {
-            name: float(reg(theta_matrix)) for name, reg in self.regularizers.items()
+            name: float(reg(model.theta)) for name, reg in self.regularizers.items()
         }
 
-        theta_tensor = model.as_numpy_array()
         laplacians: dict[str, float] = {}
         for name, laplacian in self.laplacians():
-            laplacians[name] = float(laplacian(theta_tensor))
+            laplacians[name] = float(laplacian(model.theta))
 
         return Objectives(
             loss=float(loss_value),
@@ -141,7 +137,7 @@ class CVXPYSolver(Solver[CompiledCVXPYProblem]):
     verbose: bool = False
 
     def compile(self, abstract_problem: AbstractProblem) -> CompiledCVXPYProblem:
-        theta = cp.Variable(abstract_problem.theta_shape.flat_shape)
+        theta = cp.Variable(abstract_problem.theta_shape.array_shape)
         loss = self._get_loss(theta, abstract_problem)
         local_reg, local_reg_params = self._get_local_reg(theta, abstract_problem)
         laplace_reg, laplace_params = self._get_laplace_reg(theta, abstract_problem)
@@ -167,8 +163,8 @@ class CVXPYSolver(Solver[CompiledCVXPYProblem]):
             param.value = hyperparameters.graphs[name]
 
         compiled_problem.cvxpy_problem.solve(verbose=self.verbose)
-        return StartifiedModel.from_array(
-            arr=compiled_problem.theta.value,  # ty:ignore[invalid-argument-type]
+        return StartifiedModel(
+            theta=compiled_problem.theta.value,  # ty:ignore[invalid-argument-type]
             shape=compiled_problem.theta_shape,
         )
 
@@ -192,7 +188,7 @@ class CVXPYSolver(Solver[CompiledCVXPYProblem]):
     ) -> cp.Expression:
         loss_expr = 0.0
         for node, loss in problem.group_losses():
-            node_index = problem.theta_shape.node_to_flat_index(node)
+            node_index = problem.theta_shape.node_to_index(node)
             assert isinstance(loss, CVXPYScalarFunction)
             loss_expr += loss.cvxpy_expression(theta[node_index])
         return loss_expr  # type:ignore[return-value]

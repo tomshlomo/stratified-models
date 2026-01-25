@@ -1,4 +1,5 @@
 from __future__ import annotations
+from scipy.sparse import sparray
 
 import string
 from abc import ABC, abstractmethod
@@ -186,101 +187,127 @@ EinsumPath = list[str | tuple[int, ...]]
 
 
 @attrs.frozen(kw_only=True)
-class TensorQuadForm(
-    QuadraticScalarFunction, ProxableScalarFunction, CVXPYScalarFunction
-):
+class SparseQuadraticForm(CVXPYScalarFunction):
+    a: sparray
     axis: int
     dims: tuple[int, ...]
-    a: npt.NDArray[
-        np.float64
-    ]  # TODO: could also be a pydata.sparse array, which also supports tensordot
-
-    @cached_property
-    def _call_einsum_args(self) -> tuple[str, EinsumPath]:
-        all_letters = string.ascii_letters
-        summation_index1 = all_letters[-1]
-        summation_index2 = all_letters[self.axis]
-        x2_subs = all_letters[: len(self.dims)]
-        a_subs = summation_index1 + summation_index2
-        x1_subs = x2_subs.replace(summation_index2, summation_index1, 1)
-        subscripts = f"{x1_subs},{a_subs},{x2_subs}"
-
-        x = np.empty(self.dims, dtype=self.a.dtype)
-        path, _path_str = np.einsum_path(subscripts, x, self.a, x, optimize="optimal")
-        return subscripts, path
 
     def __call__(self, x: Array) -> float:
-        subscripts, path = self._call_einsum_args
-        out = np.einsum(subscripts, x, self.a, x, optimize=path)
-        return float(out) / 2
-
-    @cached_property
-    def _prox_einsum_args(self) -> tuple[str, EinsumPath]:
-        all_letters = string.ascii_letters
-        summation_index1 = all_letters[-1]
-        summation_index2 = all_letters[self.axis]
-        eig_index = all_letters[-2]
-        x2_subs = all_letters[: len(self.dims)]
-        a_subs = (
-            "nm,m,km".replace("n", summation_index1)
-            .replace("k", summation_index2)
-            .replace("m", eig_index)
-        )
-        out_subs = x2_subs.replace(summation_index2, summation_index1)
-        subscripts = f"{a_subs},{x2_subs}->{out_subs}"
-
-        x = np.empty(self.dims, dtype=self.a.dtype)
-        u = np.empty(self.a.shape, dtype=self.a.dtype)
-        w = np.empty(self.a.shape[0], dtype=self.a.dtype)
-        path, _path_str = np.einsum_path(subscripts, u, w, u, x, optimize="optimal")
-        return subscripts, path
-
-    def prox(self, v: Array, t: float) -> Array:
-        """Argmin x' a x / 2 + |x - v|^2 / 2t
-        t a x + (x - v) = 0
-        (ta + I) x = v
-        x = (ta + I)^-1 v.
-
-        let a = udu' be the eigen decomposition
-        so:
-        x = uwu'v
-        where w = (td + I)^-1
-        """
-        if t == 0.0:
-            return v
-        subscripts, path = self._prox_einsum_args
-        d, u = np.linalg.eigh(self.a)
-        w = 1 / (t * d + 1)
-        return np.einsum(
-            subscripts,
-            u,
-            w,
-            u,
-            v,
-            optimize=path,
-        )
-
-    def to_explicit_quadratic(self) -> ExplicitQuadraticFunction:
-        return ExplicitQuadraticFunction.quadratic_form(
-            q=FlattenedTensorDot(
-                a=self.a,
-                axis=self.axis,
-                dims=self.dims,
-            ),
-        )
+        assert x.shape == self.dims
+        x = np.swapaxes(x, self.axis, -1)
+        x = np.reshape(x, (-1, x.shape[-1]))
+        y = x @ self.a
+        return float(x.ravel() @ y.ravel()) / 2
 
     def cvxpy_expression(
         self,
         x: cp.Expression,
     ) -> cp.Expression:
-        q = self.to_explicit_quadratic().q.as_sparse_matrix()
-        expression = cp.quad_form(
-            # `ThetaShape.dims` is `(m, *graph_sizes)` while the CVXPY variable
-            # is shaped `(num_nodes, m)`. Flattening in Fortran order makes the
-            # vectorization consistent with the Kronecker structure implied by
-            # `dims` (feature-major blocks).
-            x.flatten(order="F"),
-            q,
-            assume_PSD=True,
-        )
-        return expression / 2
+        assert x.shape == self.dims
+        x = cp.swapaxes(x, self.axis, -1)
+        x = cp.reshape(x, (-1, x.shape[-1]))
+        out = 0.0
+        for xx in x:
+            out += cp.quad_form(xx, self.a, assume_PSD=True)
+        return out / 2
+
+
+# @attrs.frozen(kw_only=True)
+# class TensorQuadForm(
+#     QuadraticScalarFunction, ProxableScalarFunction, CVXPYScalarFunction
+# ):
+#     axis: int
+#     dims: tuple[int, ...]
+#     a: npt.NDArray[
+#         np.float64
+#     ]  # TODO: could also be a pydata.sparse array, which also supports tensordot
+
+#     @cached_property
+#     def _call_einsum_args(self) -> tuple[str, EinsumPath]:
+#         all_letters = string.ascii_letters
+#         summation_index1 = all_letters[-1]
+#         summation_index2 = all_letters[self.axis]
+#         x2_subs = all_letters[: len(self.dims)]
+#         a_subs = summation_index1 + summation_index2
+#         x1_subs = x2_subs.replace(summation_index2, summation_index1, 1)
+#         subscripts = f"{x1_subs},{a_subs},{x2_subs}"
+
+#         x = np.empty(self.dims, dtype=self.a.dtype)
+#         path, _path_str = np.einsum_path(subscripts, x, self.a, x, optimize="optimal")
+#         return subscripts, path
+
+#     def __call__(self, x: Array) -> float:
+#         subscripts, path = self._call_einsum_args
+#         out = np.einsum(subscripts, x, self.a, x, optimize=path)
+#         return float(out) / 2
+
+#     @cached_property
+#     def _prox_einsum_args(self) -> tuple[str, EinsumPath]:
+#         all_letters = string.ascii_letters
+#         summation_index1 = all_letters[-1]
+#         summation_index2 = all_letters[self.axis]
+#         eig_index = all_letters[-2]
+#         x2_subs = all_letters[: len(self.dims)]
+#         a_subs = (
+#             "nm,m,km".replace("n", summation_index1)
+#             .replace("k", summation_index2)
+#             .replace("m", eig_index)
+#         )
+#         out_subs = x2_subs.replace(summation_index2, summation_index1)
+#         subscripts = f"{a_subs},{x2_subs}->{out_subs}"
+
+#         x = np.empty(self.dims, dtype=self.a.dtype)
+#         u = np.empty(self.a.shape, dtype=self.a.dtype)
+#         w = np.empty(self.a.shape[0], dtype=self.a.dtype)
+#         path, _path_str = np.einsum_path(subscripts, u, w, u, x, optimize="optimal")
+#         return subscripts, path
+
+#     def prox(self, v: Array, t: float) -> Array:
+#         """Argmin x' a x / 2 + |x - v|^2 / 2t
+#         t a x + (x - v) = 0
+#         (ta + I) x = v
+#         x = (ta + I)^-1 v.
+
+#         let a = udu' be the eigen decomposition
+#         so:
+#         x = uwu'v
+#         where w = (td + I)^-1
+#         """
+#         if t == 0.0:
+#             return v
+#         subscripts, path = self._prox_einsum_args
+#         d, u = np.linalg.eigh(self.a)
+#         w = 1 / (t * d + 1)
+#         return np.einsum(
+#             subscripts,
+#             u,
+#             w,
+#             u,
+#             v,
+#             optimize=path,
+#         )
+
+#     def to_explicit_quadratic(self) -> ExplicitQuadraticFunction:
+#         return ExplicitQuadraticFunction.quadratic_form(
+#             q=FlattenedTensorDot(
+#                 a=self.a,
+#                 axis=self.axis,
+#                 dims=self.dims,
+#             ),
+#         )
+
+#     def cvxpy_expression(
+#         self,
+#         x: cp.Expression,
+#     ) -> cp.Expression:
+#         q = self.to_explicit_quadratic().q.as_sparse_matrix()
+#         expression = cp.quad_form(
+#             # `ThetaShape.dims` is `(m, *graph_sizes)` while the CVXPY variable
+#             # is shaped `(num_nodes, m)`. Flattening in Fortran order makes the
+#             # vectorization consistent with the Kronecker structure implied by
+#             # `dims` (feature-major blocks).
+#             x.flatten(order="F"),
+#             q,
+#             assume_PSD=True,
+#         )
+#         return expression / 2

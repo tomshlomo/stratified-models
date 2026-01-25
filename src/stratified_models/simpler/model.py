@@ -46,23 +46,28 @@ class ThetaShape:
     def graph_sizes(self) -> tuple[int, ...]:
         return tuple(stratification.size for stratification in self.stratifications)
 
+    # @cached_property
+    # def dims(self) -> tuple[int, ...]:
+    #     # return self.m, *self.graph_sizes
+    #     return self.m, *self.graph_sizes
+
     @cached_property
-    def dims(self) -> tuple[int, ...]:
-        return self.m, *self.graph_sizes
+    def array_shape(self) -> tuple[int, ...]:
+        return *self.graph_sizes, self.m
 
     @cached_property
     def num_nodes(self) -> int:
         return int(np.prod(self.graph_sizes))
 
-    @cached_property
-    def flat_shape(self) -> tuple[int, int]:  # TODO: remove?
-        return self.num_nodes, self.m
+    # @cached_property
+    # def flat_shape(self) -> tuple[int, int]:  # TODO: remove?
+    #     return self.num_nodes, self.m
 
-    def node_to_flat_index(self, node: Node) -> int:
-        return self.index_to_flat_index(self.node_to_index(node))
+    # def node_to_flat_index(self, node: Node) -> int:
+    #     return self.index_to_flat_index(self.node_to_index(node))
 
-    def index_to_flat_index(self, index: tuple[int, ...]) -> int:
-        return int(np.ravel_multi_index(index, self.graph_sizes))
+    # def index_to_flat_index(self, index: tuple[int, ...]) -> int:
+    #     return int(np.ravel_multi_index(index, self.graph_sizes))
 
     def node_to_index(self, node: Node) -> NodeIndex:
         return tuple(
@@ -70,54 +75,61 @@ class ThetaShape:
             for stratification, sub_node in zip(self.stratifications, node, strict=True)
         )
 
-    def to_pandas_multi_index(self) -> pd.MultiIndex:
-        return pd.MultiIndex.from_product(
-            [stratification.index for stratification in self.stratifications]
-        )
+    # def to_pandas_multi_index(self) -> pd.MultiIndex:
+    #     return pd.MultiIndex.from_product(
+    #         [stratification.index for stratification in self.stratifications]
+    #     )
 
 
 @attrs.frozen(kw_only=True)
 class StartifiedModel:
-    theta: pd.DataFrame
+    # theta: pd.DataFrame
+    theta: Array
     shape: ThetaShape
 
-    @property
-    def stratification_features(self) -> Sequence[Hashable]:
-        return self.theta.index.names
+    def theta_at_node(self, node: Node) -> Array:
+        return self.theta[self.shape.node_to_index(node)]
 
-    @property
-    def regression_features(self) -> pd.Index:
-        return self.theta.columns
+    # @property
+    # def stratification_features(self) -> Sequence[Hashable]:
+    #     return self.shape.stratification_features
 
-    def as_flat_numpy_array(self) -> Array:
-        """Return theta as a `(num_nodes, m)` array.
+    # @property
+    # def regression_features(self) -> pd.Index:
+    #     return self.shape.regression_features
 
-        Row order matches `ThetaShape.index_to_flat_index` (C-order over graph sizes).
-        """
-        return self.theta.to_numpy()
+    # def as_flat_numpy_array(self) -> Array:
+    #     """Return theta as a `(num_nodes, m)` array.
 
-    def as_numpy_array(self) -> Array:
-        """Return theta as a tensor shaped `(m, graph_size0, graph_size1, ...)`."""
-        flat = self.as_flat_numpy_array()
-        return flat.T.reshape(self.shape.dims, order="C")
+    #     Row order matches `ThetaShape.index_to_flat_index` (C-order over graph sizes).
+    #     """
+    #     return self.theta.to_numpy()
+
+    # def as_numpy_array(self) -> Array:
+    #     """Return theta as a tensor shaped `(m, graph_size0, graph_size1, ...)`."""
+    #     flat = self.as_flat_numpy_array()
+    #     return flat.T.reshape(self.shape.dims, order="C")
 
     def predict(self, x: pd.DataFrame) -> pd.Series:
-        rows = pd.MultiIndex.from_arrays(
-            x.loc[:, self.stratification_features].to_numpy().T,
+        # rows = pd.MultiIndex.from_arrays(
+        #     x.loc[:, self.stratification_features].to_numpy().T,
+        # )
+        indices = np.array(
+            [s.index.get_loc(x[s.name]) for s in self.shape.stratifications]
         )
-        theta_aligned = self.theta.loc[rows, :]
+        theta_aligned = self.theta[indices]
         y = np.einsum(
             "nm,nm->n",
-            x.loc[:, self.regression_features].to_numpy(),
-            theta_aligned.to_numpy(),
+            x.loc[:, self.shape.regression_features].to_numpy(),
+            theta_aligned,
         )
         return pd.Series(y, index=x.index)
 
-    @staticmethod
-    def from_array(arr: Array, shape: ThetaShape) -> StartifiedModel:
-        theta = pd.DataFrame(
-            arr.reshape(shape.flat_shape),
-            index=shape.to_pandas_multi_index(),
-            columns=shape.regression_features,  # ty:ignore[invalid-argument-type]
-        )
-        return StartifiedModel(theta=theta, shape=shape)
+    # @staticmethod
+    # def from_array(arr: Array, shape: ThetaShape) -> StartifiedModel:
+    #     theta = pd.DataFrame(
+    #         arr.reshape(shape.flat_shape),
+    #         index=shape.to_pandas_multi_index(),
+    #         columns=shape.regression_features,  # ty:ignore[invalid-argument-type]
+    #     )
+    #     return StartifiedModel(theta=theta, shape=shape)
