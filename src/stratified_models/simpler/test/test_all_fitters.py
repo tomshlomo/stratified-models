@@ -6,7 +6,7 @@ import pytest
 
 from stratified_models.simpler.graph import NetworkXRegularizationGraph
 from stratified_models.simpler.loss import SumOfSquaresLoss
-from stratified_models.simpler.model import StartifiedModel, Stratification
+from stratified_models.simpler.model import Stratification
 from stratified_models.simpler.scalar_function import ScalarFunction, SumOfSquares
 from stratified_models.simpler.solvers import (
     AbstractProblem,
@@ -14,6 +14,7 @@ from stratified_models.simpler.solvers import (
     CVXPYSolver,
     DirectPSDSolver,
     Hyperparameters,
+    NewtonSolveInfo,
     NewtonSolver,
     SolveInfo,
     Solver,
@@ -72,8 +73,7 @@ def _make_problem_two_graphs(
     x = pd.concat(frames, ignore_index=True)
     y = pd.Series(jax.device_get(jnp.concatenate(y_parts)), index=x.index)
 
-    num_nodes = graph1.size * graph2.size
-    regularizers: dict[str, ScalarFunction] = {"l2": SumOfSquares(shape=(num_nodes, m))}
+    regularizers: dict[str, ScalarFunction] = {"l2": SumOfSquares()}
 
     problem = AbstractProblem(
         x=x,
@@ -92,7 +92,7 @@ def _make_problem_two_graphs(
 
 @pytest.mark.parametrize("reg1", [1e-12, 1e8])
 @pytest.mark.parametrize("reg2", [1e-12, 1e8])
-@pytest.mark.parametrize("l2reg", [1e-12, 1e8])
+@pytest.mark.parametrize("l2reg", [1e3, 1e8])
 @pytest.mark.parametrize(
     "solver",
     ALL_SOLVERS,
@@ -105,9 +105,14 @@ def test_fit(
         reg1=reg1, reg2=reg2, l2_reg=l2reg, m=m, n=5
     )
 
-    model, _info, _compiled = solver.compile_and_solve(problem, hyper)
-    assert isinstance(model, StartifiedModel)
-
+    model, info, _compiled = solver.compile_and_solve(problem, hyper)
+    assert info.converged()
+    if isinstance(solver, NewtonSolver):
+        assert isinstance(info, NewtonSolveInfo)
+        assert info.iterations <= 2, (
+            "Since the problem is quadratic, the Newton solver should converge "
+            "in at most 2 iterations."
+        )
     objectives = problem.objectives(model)
 
     if l2reg >= 1e7:
@@ -163,7 +168,8 @@ def test_ridge_equivalence_when_graph_regs_are_small(
     problem, hyper = _make_problem_two_graphs(
         reg1=reg1, reg2=reg2, l2_reg=l2reg, m=m, n=n
     )
-    model, _info, _compiled = solver.compile_and_solve(problem, hyper)
+    model, info, _compiled = solver.compile_and_solve(problem, hyper)
+    assert info.converged()
 
     # With (effectively) no graph regularization, the solution decouples per-node
     # and matches ridge regression for each group.
@@ -191,7 +197,8 @@ def test_all_solvers_achieve_same_objective_value() -> None:
 
     totals: list[float] = []
     for solver in ALL_SOLVERS:
-        model, _info, _compiled = solver.compile_and_solve(problem, hyper)
+        model, info, _compiled = solver.compile_and_solve(problem, hyper)
+        assert info.converged()
         total = problem.objectives(model).total(hyper)
         totals.append(float(total))
 

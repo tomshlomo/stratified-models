@@ -14,6 +14,7 @@ description: Python Coding Standards, including type annotations, data models, f
 - Prefer immutability over mutable state
 - Avoid global mutable state
 - Avoid making circular references that would have to be cleaned up by the garbage collector
+- Don't be overly defensive; assume inputs adhere to type annotations unless a guard is essential
 
 ## Type Annotations
 - Use type hints for all function signatures

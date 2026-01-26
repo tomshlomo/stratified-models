@@ -243,9 +243,12 @@ class LogisticLossFactory(LossFactory[LogisticOverLinear]):
         elif y_vals.issubset({-1, 1}):
             y_signed = y_arr
         else:
-            raise ValueError(
+            msg = (
                 "LogisticLossFactory expects binary labels in {0,1} or {-1,1}, "
                 f"got values {sorted(y_vals)}"
+            )
+            raise ValueError(
+                msg
             )
 
         y_signed = -y_signed[:, np.newaxis]

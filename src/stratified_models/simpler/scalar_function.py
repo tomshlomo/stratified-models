@@ -47,13 +47,10 @@ class Zero(QuadraticScalarFunction, CVXPYScalarFunction):
         return cp.Constant(0.0)
 
 
-@attrs.frozen(kw_only=True)
 class SumOfSquares(QuadraticScalarFunction, CVXPYScalarFunction):
     """x |-> x'x/2
     x in RefitDataType^m.
     """
-
-    shape: int | tuple[int, ...]
 
     def __call__(self, x: jax.Array) -> jax.Array:
         x_flat = jnp.ravel(x)

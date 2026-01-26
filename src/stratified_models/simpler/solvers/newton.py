@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from math import prod
 from typing import Literal
 
@@ -29,7 +29,6 @@ class NewtonSolveInfo(SolveInfo):
     final_grad_norm: float
     final_newton_decrement_sq: float
     last_step_alpha: float | None
-    extra: Mapping[str, object] = attrs.field(factory=dict)
 
     def converged(self) -> bool:
         return self.stopping_reason in {"grad_tol", "newton_tol"}
@@ -107,7 +106,8 @@ class NewtonSolver(Solver[CompiledNewtonProblem, NewtonSolveInfo]):
     # Absolute tolerance for the gradient norm (fast check)
     grad_tol: float = 1e-6
     # Tolerance for the Newton Decrement (robust check)
-    newton_tol: float = 1e-6
+    newton_atol: float = 1e-4
+    newton_rtol: float = 1e-4
     damping: float = 0.0
     psd_solver: PSDSolver = attrs.field(factory=DirectPSDSolver)
     backtracking_steps: int = 20
@@ -117,14 +117,10 @@ class NewtonSolver(Solver[CompiledNewtonProblem, NewtonSolveInfo]):
     @staticmethod
     def for_quadratic(psd_solver: PSDSolver) -> NewtonSolver:
         return NewtonSolver(
-            max_iters=1,
-            grad_tol=0.0,
-            newton_tol=0.0,
+            max_iters=2,
             damping=0.0,
             psd_solver=psd_solver,
             backtracking_steps=1,
-            backtracking_factor=0.5,
-            armijo=0.0,
         )
 
     def compile(self, abstract_problem: AbstractProblem) -> CompiledNewtonProblem:
@@ -184,7 +180,6 @@ class NewtonSolver(Solver[CompiledNewtonProblem, NewtonSolveInfo]):
                     final_grad_norm=g_norm,
                     final_newton_decrement_sq=final_newton_decrement_sq,
                     last_step_alpha=last_step_alpha,
-                    extra={"converged": True},
                 )
 
             step = self._newton_step(
@@ -196,7 +191,9 @@ class NewtonSolver(Solver[CompiledNewtonProblem, NewtonSolveInfo]):
             newton_decrement_sq = float(g @ step)
             final_newton_decrement_sq = newton_decrement_sq
 
-            if 0.5 * newton_decrement_sq <= self.newton_tol:
+            if (0.5 * newton_decrement_sq <= self.newton_atol) or (
+                0.5 * newton_decrement_sq <= self.newton_rtol * jnp.abs(f0)
+            ):
                 return theta_vec, NewtonSolveInfo(
                     iterations=iteration,
                     stopping_reason="newton_tol",
@@ -204,7 +201,6 @@ class NewtonSolver(Solver[CompiledNewtonProblem, NewtonSolveInfo]):
                     final_grad_norm=g_norm,
                     final_newton_decrement_sq=final_newton_decrement_sq,
                     last_step_alpha=last_step_alpha,
-                    extra={"converged": True},
                 )
 
             theta_next, alpha, reason = self._backtracking_update(
@@ -224,7 +220,6 @@ class NewtonSolver(Solver[CompiledNewtonProblem, NewtonSolveInfo]):
                     final_grad_norm=g_norm,
                     final_newton_decrement_sq=final_newton_decrement_sq,
                     last_step_alpha=last_step_alpha,
-                    extra={"converged": False},
                 )
 
             theta_vec = theta_next
@@ -238,7 +233,6 @@ class NewtonSolver(Solver[CompiledNewtonProblem, NewtonSolveInfo]):
             final_grad_norm=g_norm,
             final_newton_decrement_sq=final_newton_decrement_sq,
             last_step_alpha=last_step_alpha,
-            extra={"converged": False},
         )
 
     def _newton_step(
