@@ -7,7 +7,11 @@ from sklearn.preprocessing import StandardScaler
 
 from stratified_models.graph import NetworkXRegularizationGraph
 from stratified_models.model import StartifiedModel, Stratification, ThetaShape
-from stratified_models.pipelines import StratifiedPipeline, StratifiedPipelineFitter
+from stratified_models.pipelines import (
+    StratifiedPipeline,
+    StratifiedPipelineFitter,
+    TransformPipeline,
+)
 from stratified_models.solvers import (
     AbstractProblem,
     Hyperparameters,
@@ -55,12 +59,17 @@ def test_pipeline_predict_applies_stratifier_and_normalizer() -> None:
     )
     x = pd.DataFrame({"value": [0.1, 0.6], "x1": [1.0, 2.0], "x2": [3.0, 4.0]})
     normalizer = StandardScaler().fit(x[["x1", "x2"]])
-    pipeline = StratifiedPipeline(
-        stratifiers=[stratifier], normalizer=normalizer, model=model
+    transformers = TransformPipeline(
+        stratifiers=[stratifier],
+        normalizer=normalizer,
+        target_normalizer=None,
+        regression_features=["x1", "x2"],
+        intercept=False,
     )
+    pipeline = StratifiedPipeline(transformers=transformers, model=model)
 
     x_work = x.copy()
-    predicted = pipeline.predict(x_work)
+    predicted = pipeline.transform_and_predict(x_work)
 
     normalized = normalizer.transform(x[["x1", "x2"]])
     theta_aligned = np.array([[1.0, 2.0], [3.0, 4.0]])
@@ -69,7 +78,7 @@ def test_pipeline_predict_applies_stratifier_and_normalizer() -> None:
     assert "group" in x_work.columns
 
 
-def test_pipeline_fitter_builds_problem_and_mutates_frame() -> None:
+def test_pipeline_fitter_builds_problem_and_returns_compiled() -> None:
     x = pd.DataFrame(
         {"value": [0.0, 1.0, 2.0], "x1": [1.0, 2.0, 3.0], "x2": [2.0, 1.0, 0.0]}
     )
@@ -89,14 +98,26 @@ def test_pipeline_fitter_builds_problem_and_mutates_frame() -> None:
     )
     hyperparameters = Hyperparameters(graphs={"group": 1.0}, regularizers={})
 
-    pipeline, info = fitter.fit(x, y, hyperparameters)
+    compiled = fitter.compile(x.copy(), y)
+    pipeline, info = fitter.fit(compiled, hyperparameters)
 
     assert solver.compiled is not None
+    assert solver.compiled is compiled.solver_compiled_problem
     assert solver.last_hyperparameters is hyperparameters
-    assert "group" in x.columns
-    assert "one" in x.columns
-    assert np.allclose(x[["x1", "x2"]].mean().to_numpy(), 0.0, atol=1e-7)
+
+    # Check that the compiled problem has the transformed data
+    # Note: compiled.solver_problem is AbstractProblem in this test due to DummySolver
+    assert "group" in compiled.solver_compiled_problem.x.columns
+    assert "one" in compiled.solver_compiled_problem.x.columns
+    assert "one" in compiled.solver_compiled_problem.regression_features
+    assert np.allclose(compiled.solver_compiled_problem.y.mean(), 0.0, atol=1e-7)
+
+    # Check that original x is NOT mutated
+    assert "group" not in x.columns
+    assert "one" not in x.columns
+
     assert len(solver.compiled.graphs) == 1
-    assert pipeline.normalizer is not None
-    assert len(pipeline.stratifiers) == 1
+    assert pipeline.transformers.normalizer is not None
+    assert pipeline.transformers.target_normalizer is not None
+    assert len(pipeline.transformers.stratifiers) == 1
     assert info.converged()

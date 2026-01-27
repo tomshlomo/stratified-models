@@ -12,7 +12,7 @@ import structlog
 
 from stratified_models.graph import RegularizationGraph
 from stratified_models.loss import Loss
-from stratified_models.model import Node, StartifiedModel, ThetaShape
+from stratified_models.model import Node, NodeIndex, StartifiedModel, ThetaShape
 from stratified_models.scalar_function import ScalarFunction
 
 logger = structlog.get_logger()
@@ -48,6 +48,26 @@ class Objectives:
             laplacians_total = laplacians_total + hyperparameters.graphs[name] * value
 
         return self.loss + regularizers_total + laplacians_total
+
+
+def compute_objectives(
+    theta: jax.Array,
+    losses: Sequence[tuple[NodeIndex, ScalarFunction]],
+    regularizers: Mapping[str, ScalarFunction],
+    laplacians: Sequence[tuple[str, ScalarFunction]],
+) -> Objectives:
+    loss_value = jnp.asarray(0.0)
+    for node_idx, loss in losses:
+        loss_value = loss_value + loss(theta[node_idx])
+
+    regs = {name: reg(theta) for name, reg in regularizers.items()}
+    laps = {name: lap(theta) for name, lap in laplacians}
+
+    return Objectives(
+        loss=loss_value,
+        regularizers=regs,
+        laplacians=laps,
+    )
 
 
 @attrs.frozen(kw_only=True)
@@ -128,29 +148,26 @@ class AbstractProblem:
             num_regularizers=len(self.regularizers),
             num_graphs=len(self.graphs),
         )
-        loss_value = jnp.asarray(0.0)
+
+        losses = []
         for node, loss in self.group_losses():
-            theta_node = model.theta_at_node(node)
-            loss_value = loss_value + loss(theta_node)
+            losses.append((model.shape.node_to_index(node), loss))
 
-        regularizers = {
-            name: reg(model.theta) for name, reg in self.regularizers.items()
-        }
+        laplacians = list(self.laplacians())
 
-        laplacians: dict[str, jax.Array] = {}
-        for name, laplacian in self.laplacians():
-            laplacians[name] = laplacian(model.theta)
+        objs = compute_objectives(
+            theta=model.theta,
+            losses=losses,
+            regularizers=self.regularizers,
+            laplacians=laplacians,
+        )
 
         logger.debug(
             "abstract_problem_objectives_complete",
-            num_regularizers=len(regularizers),
-            num_laplacians=len(laplacians),
+            num_regularizers=len(objs.regularizers),
+            num_laplacians=len(objs.laplacians),
         )
-        return Objectives(
-            loss=loss_value,
-            regularizers=regularizers,
-            laplacians=laplacians,
-        )
+        return objs
 
 
 class Solver[T, I: SolveInfo](ABC):

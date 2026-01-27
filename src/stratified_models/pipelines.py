@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from collections.abc import Hashable, Mapping, Sequence
 
 import attrs
@@ -25,29 +27,64 @@ logger = structlog.get_logger()
 
 @attrs.frozen(kw_only=True)
 class StratifiedPipeline:
-    stratifiers: Sequence[Stratifier]
-    normalizer: StandardScaler | None
+    transformers: TransformPipeline
     model: StartifiedModel
 
-    def predict(self, x: pd.DataFrame) -> pd.Series:
+    def transform_and_predict(self, x: pd.DataFrame) -> pd.Series:
         logger.info(
             "pipeline_predict_start",
             rows=x.shape[0],
-            num_stratifiers=len(self.stratifiers),
-            normalize=self.normalizer is not None,
+            num_stratifiers=len(self.transformers.stratifiers),
+            normalize=self.transformers.normalizer is not None,
         )
+        self.transformers.transform(x)
+        y_pred = self.model.predict(x)
+        return self.transformers.inverse_transform_target(y_pred)
+
+
+@attrs.frozen(kw_only=True)
+class TransformPipeline:
+    stratifiers: Sequence[Stratifier]
+    normalizer: StandardScaler | None
+    target_normalizer: StandardScaler | None
+    regression_features: Sequence[str]
+    intercept: bool
+
+    def transform(self, df: pd.DataFrame) -> None:
         for stratifier in self.stratifiers:
-            stratifier.transform_df_inplace(x)
+            stratifier.transform_df_inplace(df)
         if self.normalizer is not None:
-            x[self.model.shape.regression_features] = self.normalizer.transform(
-                x[self.model.shape.regression_features]
+            df[self.regression_features] = self.normalizer.transform(
+                df[self.regression_features]
             )
             logger.debug(
-                "pipeline_predict_normalized",
-                rows=x.shape[0],
-                num_regression_features=len(self.model.shape.regression_features),
+                "pipeline_transform_normalized",
+                rows=df.shape[0],
+                num_regression_features=len(self.regression_features),
             )
-        return self.model.predict(x)
+        if self.intercept:
+            df["one"] = 1.0
+            logger.debug("pipeline_transform_intercept_added", rows=df.shape[0])
+
+    def transform_target(self, y: pd.Series) -> pd.Series:
+        if self.target_normalizer is None:
+            return y
+        y_vec = y.to_numpy().reshape(-1, 1)
+        y_transformed = self.target_normalizer.transform(y_vec).flatten()
+        return pd.Series(y_transformed, index=y.index, name=y.name)
+
+    def inverse_transform_target(self, y: pd.Series) -> pd.Series:
+        if self.target_normalizer is None:
+            return y
+        y_vec = y.to_numpy().reshape(-1, 1)
+        y_original = self.target_normalizer.inverse_transform(y_vec).flatten()
+        return pd.Series(y_original, index=y.index, name=y.name)
+
+
+@attrs.frozen(kw_only=True)
+class CompiledPipelineFitProblem[T]:
+    transformers: TransformPipeline
+    solver_compiled_problem: T
 
 
 @attrs.frozen(kw_only=True)
@@ -55,26 +92,20 @@ class StratifiedPipelineFitter[T, I: SolveInfo]:
     stratifiers_fitters: Sequence[tuple[Sequence[Hashable], StratifierFitter]] = ()
     graphs: Sequence[RegularizationGraph] = ()
     normalize: bool = True
+    normalize_target: bool = True
     regression_features: Sequence[str] = ()
     intercept: bool = True
     solver: Solver[T, I]
     loss: Loss = attrs.field(factory=SumOfSquaresLoss)
     regularizers: Mapping[str, ScalarFunction] = attrs.field(factory=dict)
 
-    def fit(
-        self,
-        x: pd.DataFrame,
-        y: pd.Series,
-        hyperparameters: Hyperparameters,
-    ) -> tuple[StratifiedPipeline, I]:
+    def _fit_transformers(self, x: pd.DataFrame, y: pd.Series) -> TransformPipeline:
         logger.info(
-            "pipeline_fit_start",
+            "pipeline_fit_transformers_start",
             rows=x.shape[0],
-            num_regression_features=len(self.regression_features),
             num_stratifiers=len(self.stratifiers_fitters),
-            num_graphs=len(self.graphs),
             normalize=self.normalize,
-            intercept=self.intercept,
+            normalize_target=self.normalize_target,
         )
         stratifiers = []
         for feature_names, stratifier_fitter in self.stratifiers_fitters:
@@ -84,7 +115,6 @@ class StratifiedPipelineFitter[T, I: SolveInfo]:
                 num_features=len(feature_names),
             )
             stratifier = stratifier_fitter.fit(x[feature_names])
-            stratifier.transform_df_inplace(x)
             stratifiers.append(stratifier)
             logger.info(
                 "pipeline_stratifier_fit_complete",
@@ -93,9 +123,7 @@ class StratifiedPipelineFitter[T, I: SolveInfo]:
             )
         if self.normalize:
             normalizer = StandardScaler()
-            x[self.regression_features] = normalizer.fit_transform(
-                x[self.regression_features]
-            )
+            normalizer.fit(x[self.regression_features])
             logger.debug(
                 "pipeline_fit_normalized",
                 rows=x.shape[0],
@@ -103,29 +131,84 @@ class StratifiedPipelineFitter[T, I: SolveInfo]:
             )
         else:
             normalizer = None
-        if self.intercept:
-            x["one"] = 1.0
-            logger.debug("pipeline_fit_intercept_added", rows=x.shape[0])
-        abstract_problem = AbstractProblem(
-            x=x,
-            y=y,
+
+        if self.normalize_target:
+            target_normalizer = StandardScaler()
+            target_normalizer.fit(y.to_numpy().reshape(-1, 1))
+            logger.debug("pipeline_fit_target_normalized", rows=y.shape[0])
+        else:
+            target_normalizer = None
+
+        return TransformPipeline(
+            stratifiers=stratifiers,
+            normalizer=normalizer,
+            target_normalizer=target_normalizer,
             regression_features=self.regression_features,
-            graphs=[stratifier.graph for stratifier in stratifiers] + list(self.graphs),
+            intercept=self.intercept,
+        )
+
+    def _build_solver_abstract_problem(
+        self,
+        transformers: TransformPipeline,
+        x: pd.DataFrame,
+        y: pd.Series,
+    ) -> AbstractProblem:
+        logger.info("pipeline_build_solver_problem_start", rows=x.shape[0])
+        problem_regression_features = list(transformers.regression_features)
+        if transformers.intercept:
+            problem_regression_features.append("one")
+
+        y_transformed = transformers.transform_target(y)
+
+        return AbstractProblem(
+            x=x,
+            y=y_transformed,
+            regression_features=problem_regression_features,
+            graphs=[s.graph for s in transformers.stratifiers] + list(self.graphs),
             regularizers=self.regularizers,
             loss=self.loss,
         )
-        model, info, _ = self.solver.compile_and_solve(
-            abstract_problem, hyperparameters
+
+    def compile(self, x: pd.DataFrame, y: pd.Series) -> CompiledPipelineFitProblem[T]:
+        transformers = self._fit_transformers(x, y)
+        transformers.transform(x)
+        solver_abstract_problem = self._build_solver_abstract_problem(
+            transformers, x, y
+        )
+
+        logger.info(
+            "pipeline_compile_start",
+            solver=type(self.solver).__name__,
+            rows=solver_abstract_problem.n,
+            num_graphs=len(solver_abstract_problem.graphs),
+            num_regularizers=len(solver_abstract_problem.regularizers),
+        )
+        solver_compiled_problem = self.solver.compile(solver_abstract_problem)
+        logger.info("pipeline_compile_complete", solver=type(self.solver).__name__)
+
+        return CompiledPipelineFitProblem(
+            transformers=transformers,
+            solver_compiled_problem=solver_compiled_problem,
+        )
+
+    def fit(
+        self,
+        compiled: CompiledPipelineFitProblem[T],
+        hyperparameters: Hyperparameters,
+    ) -> tuple[StratifiedPipeline, I]:
+        logger.info("pipeline_solve_start", solver=type(self.solver).__name__)
+        model, info = self.solver.solve(
+            compiled.solver_compiled_problem, hyperparameters
         )
         logger.info(
-            "pipeline_fit_complete",
+            "pipeline_solve_complete",
+            solver=type(self.solver).__name__,
             converged=info.converged(),
             solve_info=type(info).__name__,
         )
         return (
             StratifiedPipeline(
-                stratifiers=stratifiers,
-                normalizer=normalizer,
+                transformers=compiled.transformers,
                 model=model,
             ),
             info,

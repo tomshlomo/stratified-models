@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import Callable
+from collections.abc import Callable, Mapping, Sequence
 from math import prod
 from typing import Literal
 
@@ -11,12 +11,15 @@ import jax.numpy as jnp
 import structlog
 from jax.scipy.sparse.linalg import cg
 
-from stratified_models.model import StartifiedModel
+from stratified_models.model import NodeIndex, StartifiedModel, ThetaShape
+from stratified_models.scalar_function import ScalarFunction
 from stratified_models.solvers.types import (
     AbstractProblem,
     Hyperparameters,
+    Objectives,
     SolveInfo,
     Solver,
+    compute_objectives,
 )
 
 logger = structlog.get_logger()
@@ -39,7 +42,22 @@ class NewtonSolveInfo(SolveInfo):
 
 @attrs.frozen(kw_only=True)
 class CompiledNewtonProblem:
-    problem: AbstractProblem
+    theta_shape: ThetaShape
+    losses: Sequence[tuple[NodeIndex, ScalarFunction]]
+    regularizers: Mapping[str, ScalarFunction]
+    laplacians: Sequence[tuple[str, ScalarFunction]]
+
+    objective: Callable[[jax.Array, Hyperparameters], jax.Array]
+    gradient: Callable[[jax.Array, Hyperparameters], jax.Array]
+    hessian: Callable[[jax.Array, Hyperparameters], jax.Array] | None
+
+    solutions_history: list[jax.Array] = attrs.field(factory=list)
+
+    def compute_objectives(self, theta_vec: jax.Array) -> Objectives:
+        theta = jnp.reshape(theta_vec, self.theta_shape.array_shape)
+        return compute_objectives(
+            theta, self.losses, self.regularizers, self.laplacians
+        )
 
 
 class PSDSolver(ABC):
@@ -56,6 +74,7 @@ class PSDSolver(ABC):
         matvec: Callable[[jax.Array], jax.Array],
         matrix: jax.Array | None,
         damping: float,
+        x0: jax.Array | None,
     ) -> jax.Array:
         pass
 
@@ -73,6 +92,7 @@ class DirectPSDSolver(PSDSolver):
         matvec: Callable[[jax.Array], jax.Array],  # noqa: ARG002
         matrix: jax.Array | None,
         damping: float,
+        x0: jax.Array | None,  # noqa: ARG002
     ) -> jax.Array:
         assert matrix is not None
         eye = jnp.eye(matrix.shape[0])
@@ -95,17 +115,19 @@ class CGPSDSolver(PSDSolver):
         matvec: Callable[[jax.Array], jax.Array],
         matrix: jax.Array | None,  # noqa: ARG002
         damping: float,
+        x0: jax.Array | None,
     ) -> jax.Array:
         def damped_matvec(v: jax.Array) -> jax.Array:
             return matvec(v) + damping * v
 
-        x, _info = cg(damped_matvec, b, tol=self.tol, maxiter=self.maxiter)
+        x, _info = cg(damped_matvec, b, x0=x0, tol=self.tol, maxiter=self.maxiter)
         return x
 
 
 @attrs.frozen(kw_only=True)
 class NewtonSolver(Solver[CompiledNewtonProblem, NewtonSolveInfo]):
     max_iters: int = 50
+    solutions_history_size: int = 100
     # Absolute tolerance for the gradient norm (fast check)
     grad_tol: float = 1e-6
     # Tolerance for the Newton Decrement (robust check)
@@ -127,54 +149,102 @@ class NewtonSolver(Solver[CompiledNewtonProblem, NewtonSolveInfo]):
         )
 
     def compile(self, abstract_problem: AbstractProblem) -> CompiledNewtonProblem:
-        return CompiledNewtonProblem(problem=abstract_problem)
+        shape = abstract_problem.theta_shape
+
+        losses = []
+        for node, loss_fn in abstract_problem.group_losses():
+            losses.append((shape.node_to_index(node), loss_fn))
+
+        laplacians = list(abstract_problem.laplacians())
+        regularizers = abstract_problem.regularizers
+
+        def unpack(theta_vec: jax.Array) -> jax.Array:
+            return jnp.reshape(theta_vec, shape.array_shape)
+
+        def objective_fn(
+            theta_vec: jax.Array, hyperparameters: Hyperparameters
+        ) -> jax.Array:
+            theta = unpack(theta_vec)
+            objs = compute_objectives(theta, losses, regularizers, laplacians)
+            return objs.total(hyperparameters)
+
+        grad_fn = jax.grad(objective_fn, argnums=0)
+
+        hess_fn = None
+        if self.psd_solver.needs_matrix:
+            hess_fn = jax.hessian(objective_fn, argnums=0)
+
+        return CompiledNewtonProblem(
+            theta_shape=shape,
+            losses=losses,
+            regularizers=regularizers,
+            laplacians=laplacians,
+            objective=objective_fn,
+            gradient=grad_fn,
+            hessian=hess_fn,
+        )
 
     def solve(
         self,
         compiled_problem: CompiledNewtonProblem,
         hyperparameters: Hyperparameters,
     ) -> tuple[StartifiedModel, NewtonSolveInfo]:
-        problem = compiled_problem.problem
-        shape = problem.theta_shape.array_shape
-        dim = int(prod(shape))
-
-        def unpack(theta_vec: jax.Array) -> jax.Array:
-            return jnp.reshape(theta_vec, shape)
+        shape = compiled_problem.theta_shape
+        dim = int(prod(shape.array_shape))
 
         def objective_vec(theta_vec: jax.Array) -> jax.Array:
-            theta = unpack(theta_vec)
-            model = StartifiedModel(theta=theta, shape=problem.theta_shape)
-            return problem.objectives(model).total(hyperparameters)
+            return compiled_problem.objective(theta_vec, hyperparameters)
 
-        grad_vec = jax.grad(objective_vec)
-        hess_vec = jax.hessian(objective_vec) if self.psd_solver.needs_matrix else None
+        def grad_vec(theta_vec: jax.Array) -> jax.Array:
+            return compiled_problem.gradient(theta_vec, hyperparameters)
+
+        hess_vec = None
+        hessian_fn = compiled_problem.hessian
+        if hessian_fn is not None:
+
+            def hess_vec(theta_vec: jax.Array) -> jax.Array:
+                return hessian_fn(theta_vec, hyperparameters)
+
+        initial_theta_vec = jnp.zeros((dim,))
+        if compiled_problem.solutions_history:
+            candidates = jnp.stack(compiled_problem.solutions_history)
+            objectives = jax.vmap(objective_vec)(candidates)
+            best_idx = jnp.argmin(objectives)
+            initial_theta_vec = candidates[best_idx]
 
         theta_vec, info = self._solve_vec(
-            dim=dim,
             objective_vec=objective_vec,
             grad_vec=grad_vec,
             hess_vec=hess_vec,
+            initial_theta_vec=initial_theta_vec,
         )
+
+        compiled_problem.solutions_history.append(theta_vec)
+        if len(compiled_problem.solutions_history) > self.solutions_history_size:
+            compiled_problem.solutions_history.pop(0)
+
         logger.info(
             "newton_solve_complete",
             iterations=info.iterations,
             stopping_reason=info.stopping_reason,
             converged=info.converged(),
         )
-        model = StartifiedModel(theta=unpack(theta_vec), shape=problem.theta_shape)
+        theta = jnp.reshape(theta_vec, shape.array_shape)
+        model = StartifiedModel(theta=theta, shape=shape)
         return model, info
 
     def _solve_vec(
         self,
         *,
-        dim: int,
         objective_vec: Callable[[jax.Array], jax.Array],
         grad_vec: Callable[[jax.Array], jax.Array],
         hess_vec: Callable[[jax.Array], jax.Array] | None,
+        initial_theta_vec: jax.Array,
     ) -> tuple[jax.Array, NewtonSolveInfo]:
-        theta_vec = jnp.zeros((dim,))
+        theta_vec = initial_theta_vec
         last_step_alpha: float | None = None
         final_newton_decrement_sq = float("nan")
+        previous_step: jax.Array | None = None
 
         for iteration in range(1, self.max_iters + 1):
             f0 = objective_vec(theta_vec)
@@ -207,7 +277,9 @@ class NewtonSolver(Solver[CompiledNewtonProblem, NewtonSolveInfo]):
                 g=g,
                 grad_vec=grad_vec,
                 hess_vec=hess_vec,
+                previous_step=previous_step,
             )
+            previous_step = step
             newton_decrement_sq = float(g @ step)
             final_newton_decrement_sq = newton_decrement_sq
 
@@ -274,6 +346,7 @@ class NewtonSolver(Solver[CompiledNewtonProblem, NewtonSolveInfo]):
         g: jax.Array,
         grad_vec: Callable[[jax.Array], jax.Array],
         hess_vec: Callable[[jax.Array], jax.Array] | None,
+        previous_step: jax.Array | None,
     ) -> jax.Array:
         theta_vec_now = theta_vec
 
@@ -290,6 +363,7 @@ class NewtonSolver(Solver[CompiledNewtonProblem, NewtonSolveInfo]):
             matvec=matvec,
             matrix=h,
             damping=self.damping,
+            x0=previous_step,
         )
 
     def _backtracking_update(
