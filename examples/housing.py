@@ -19,19 +19,19 @@ def _():
     from sklearn.model_selection import KFold, train_test_split
     from sklearn.preprocessing import StandardScaler
 
-    from stratified_models.simpler.graph import NetworkXRegularizationGraph
-    from stratified_models.simpler.loss import SumOfSquaresLoss
-    from stratified_models.simpler.model import Stratification
-    from stratified_models.simpler.scalar_function import SumOfSquares
-    from stratified_models.simpler.solvers.newton import (
+    from stratified_models.graph import NetworkXRegularizationGraph
+    from stratified_models.loss import SumOfSquaresLoss
+    from stratified_models.model import Stratification
+    from stratified_models.scalar_function import SumOfSquares
+    from stratified_models.solvers.newton import (
         DirectPSDSolver,
         NewtonSolver,
     )
-    from stratified_models.simpler.solvers.types import (
+    from stratified_models.solvers.types import (
         AbstractProblem,
         Hyperparameters,
     )
-    from stratified_models.simpler.stratifiers import (
+    from stratified_models.stratifiers import (
         ConstantWidth,
         KMeansConfig,
         KMeansStratifier,
