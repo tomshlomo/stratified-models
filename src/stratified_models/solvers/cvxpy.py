@@ -8,13 +8,13 @@ import jax.numpy as jnp
 import structlog
 
 from stratified_models.model import StartifiedModel, ThetaShape
-from stratified_models.scalar_function import CVXPYScalarFunction
-from stratified_models.solvers.types import (
+from stratified_models.problem import (
     AbstractProblem,
     Hyperparameters,
     SolveInfo,
     Solver,
 )
+from stratified_models.scalar_function import CVXPYScalarFunction
 
 logger = structlog.get_logger()
 

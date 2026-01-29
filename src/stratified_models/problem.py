@@ -98,21 +98,11 @@ class AbstractProblem:
             rows=self.n,
         )
         for node, x_slice in self.x.groupby(groupby_cols):
-            logger.debug(
-                "abstract_problem_group_data_group",
-                node=tuple(str(part) for part in node),
-                rows=x_slice.shape[0],
-            )
             yield node, x_slice, self.y[x_slice.index]
 
     def group_losses(self) -> Iterable[tuple[Node, ScalarFunction]]:
         logger.debug("abstract_problem_group_losses_start", rows=self.n)
         for node, x, y in self.group_data():
-            logger.debug(
-                "abstract_problem_group_losses_group",
-                node=tuple(str(part) for part in node),
-                rows=x.shape[0],
-            )
             yield (
                 node,
                 self.loss.build(

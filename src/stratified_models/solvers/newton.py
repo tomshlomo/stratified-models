@@ -12,8 +12,7 @@ import structlog
 from jax.scipy.sparse.linalg import cg
 
 from stratified_models.model import NodeIndex, StartifiedModel, ThetaShape
-from stratified_models.scalar_function import ScalarFunction
-from stratified_models.solvers.types import (
+from stratified_models.problem import (
     AbstractProblem,
     Hyperparameters,
     Objectives,
@@ -21,6 +20,7 @@ from stratified_models.solvers.types import (
     Solver,
     compute_objectives,
 )
+from stratified_models.scalar_function import ScalarFunction
 
 logger = structlog.get_logger()
 
@@ -74,7 +74,6 @@ class PSDSolver(ABC):
         matvec: Callable[[jax.Array], jax.Array],
         matrix: jax.Array | None,
         damping: float,
-        x0: jax.Array | None,
     ) -> jax.Array:
         pass
 
@@ -92,7 +91,6 @@ class DirectPSDSolver(PSDSolver):
         matvec: Callable[[jax.Array], jax.Array],  # noqa: ARG002
         matrix: jax.Array | None,
         damping: float,
-        x0: jax.Array | None,  # noqa: ARG002
     ) -> jax.Array:
         assert matrix is not None
         eye = jnp.eye(matrix.shape[0])
@@ -115,12 +113,11 @@ class CGPSDSolver(PSDSolver):
         matvec: Callable[[jax.Array], jax.Array],
         matrix: jax.Array | None,  # noqa: ARG002
         damping: float,
-        x0: jax.Array | None,
     ) -> jax.Array:
         def damped_matvec(v: jax.Array) -> jax.Array:
             return matvec(v) + damping * v
 
-        x, _info = cg(damped_matvec, b, x0=x0, tol=self.tol, maxiter=self.maxiter)
+        x, _info = cg(damped_matvec, b, tol=self.tol, maxiter=self.maxiter)
         return x
 
 
@@ -192,18 +189,27 @@ class NewtonSolver(Solver[CompiledNewtonProblem, NewtonSolveInfo]):
         shape = compiled_problem.theta_shape
         dim = int(prod(shape.array_shape))
 
-        def objective_vec(theta_vec: jax.Array) -> jax.Array:
+        def objective_vec_raw(theta_vec: jax.Array) -> jax.Array:
             return compiled_problem.objective(theta_vec, hyperparameters)
 
-        def grad_vec(theta_vec: jax.Array) -> jax.Array:
+        def grad_vec_raw(theta_vec: jax.Array) -> jax.Array:
             return compiled_problem.gradient(theta_vec, hyperparameters)
+
+        # Warm up cached properties before jitting
+        _warmup_theta = jnp.zeros((dim,))
+        _ = objective_vec_raw(_warmup_theta)
+
+        objective_vec = jax.jit(objective_vec_raw)
+        grad_vec = jax.jit(grad_vec_raw)
 
         hess_vec = None
         hessian_fn = compiled_problem.hessian
         if hessian_fn is not None:
 
-            def hess_vec(theta_vec: jax.Array) -> jax.Array:
+            def hess_vec_raw(theta_vec: jax.Array) -> jax.Array:
                 return hessian_fn(theta_vec, hyperparameters)
+
+            hess_vec = jax.jit(hess_vec_raw)
 
         initial_theta_vec = jnp.zeros((dim,))
         if compiled_problem.solutions_history:
@@ -244,21 +250,13 @@ class NewtonSolver(Solver[CompiledNewtonProblem, NewtonSolveInfo]):
         theta_vec = initial_theta_vec
         last_step_alpha: float | None = None
         final_newton_decrement_sq = float("nan")
-        previous_step: jax.Array | None = None
 
         for iteration in range(1, self.max_iters + 1):
             f0 = objective_vec(theta_vec)
             g = grad_vec(theta_vec)
             g_norm = float(jnp.linalg.norm(g))
-            logger.debug(
-                "newton_iteration",
-                iteration=iteration,
-                objective_value=float(f0),
-                grad_norm=g_norm,
-            )
-
             if g_norm <= self.grad_tol:
-                logger.debug(
+                logger.info(
                     "newton_stop_grad_tol",
                     iteration=iteration,
                     grad_norm=g_norm,
@@ -277,16 +275,22 @@ class NewtonSolver(Solver[CompiledNewtonProblem, NewtonSolveInfo]):
                 g=g,
                 grad_vec=grad_vec,
                 hess_vec=hess_vec,
-                previous_step=previous_step,
             )
-            previous_step = step
             newton_decrement_sq = float(g @ step)
+
+            logger.info(
+                "newton_iteration",
+                iteration=iteration,
+                objective_value=float(f0),
+                grad_norm=g_norm,
+                newton_decrement_sq=newton_decrement_sq,
+            )
             final_newton_decrement_sq = newton_decrement_sq
 
             if (0.5 * newton_decrement_sq <= self.newton_atol) or (
                 0.5 * newton_decrement_sq <= self.newton_rtol * jnp.abs(f0)
             ):
-                logger.debug(
+                logger.info(
                     "newton_stop_newton_tol",
                     iteration=iteration,
                     newton_decrement_sq=newton_decrement_sq,
@@ -311,7 +315,7 @@ class NewtonSolver(Solver[CompiledNewtonProblem, NewtonSolveInfo]):
             last_step_alpha = alpha
 
             if reason is not None:
-                logger.debug(
+                logger.info(
                     "newton_backtracking_stop",
                     iteration=iteration,
                     reason=reason,
@@ -346,11 +350,11 @@ class NewtonSolver(Solver[CompiledNewtonProblem, NewtonSolveInfo]):
         g: jax.Array,
         grad_vec: Callable[[jax.Array], jax.Array],
         hess_vec: Callable[[jax.Array], jax.Array] | None,
-        previous_step: jax.Array | None,
     ) -> jax.Array:
         theta_vec_now = theta_vec
 
-        def matvec(v: jax.Array, theta_vec_now: jax.Array = theta_vec_now) -> jax.Array:
+        @jax.jit
+        def matvec(v: jax.Array) -> jax.Array:
             return jax.jvp(grad_vec, (theta_vec_now,), (v,))[1]
 
         h: jax.Array | None = None
@@ -363,7 +367,6 @@ class NewtonSolver(Solver[CompiledNewtonProblem, NewtonSolveInfo]):
             matvec=matvec,
             matrix=h,
             damping=self.damping,
-            x0=previous_step,
         )
 
     def _backtracking_update(

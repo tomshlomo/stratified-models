@@ -48,10 +48,10 @@ class OptunaTuner[T, I: SolveInfo]:
     n_trials: int = 50
     timeout: float | None = None
     reduction_factor: int = 3
+    initial_multiplier: float | None = 1e-4
 
     def tune(self, x: pd.DataFrame, y: pd.Series) -> TuningResult[I]:
         n_rows = len(x)
-        default_value = 1e-4 * n_rows
 
         # Pre-compile all folds
         compiled_folds = self._compile_folds(x, y)
@@ -73,9 +73,11 @@ class OptunaTuner[T, I: SolveInfo]:
             sampler=self.sampler,
         )
 
-        # Enqueue initial trial with default values
-        initial_params = self._build_initial_params(default_value)
-        study.enqueue_trial(initial_params)
+        # Optionally enqueue initial trial
+        if self.initial_multiplier is not None:
+            default_value = self.initial_multiplier * n_rows
+            initial_params = self._build_initial_params(default_value)
+            study.enqueue_trial(initial_params)
 
         logger.info(
             "tuning_optimize_start",

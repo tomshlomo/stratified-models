@@ -27,7 +27,7 @@ def _():
         DirectPSDSolver,
         NewtonSolver,
     )
-    from stratified_models.solvers.types import (
+    from stratified_models.problem import (
         AbstractProblem,
         Hyperparameters,
     )
