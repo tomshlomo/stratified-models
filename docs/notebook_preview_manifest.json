@@ -4,10 +4,10 @@
   "notebooks": [
     {
       "path": "examples/__marimo__/session/00_review_gallery.py.json",
-      "bytes": 6558,
+      "bytes": 6696,
       "cells": 2,
-      "source_sha256": "7bb861df2296ffa42f2d01d14a33c63bf6fcefa7854d0e8c484a3c35e0439c40",
-      "session_sha256": "8270dce740a36454bc526cd1598f7b35496b3fd6b92ea7007a999b7ff6ecd0cc",
+      "source_sha256": "457915ad682990024a164288292494dfbb501344600a2f72915d1303288faa20",
+      "session_sha256": "365ec11fd1da519ecbdc588e3edbc916e62dd470b1b1ca31e2f329d2dfb8db59",
       "schema_version": "1",
       "marimo_version": "0.19.6",
       "source_hashes_match": true,
@@ -80,5 +80,6 @@
       "error_outputs": 0
     }
   ],
-  "presentation": "Code cells are hidden in the hosted reader view; their executable contents and saved outputs are unchanged."
+  "presentation": "Code cells are hidden in the hosted reader view; their executable contents and saved outputs are unchanged.",
+  "experiment_presentation_commit": "f1c5091a744c24e0317840e0d060d751ce2d9acb"
 }

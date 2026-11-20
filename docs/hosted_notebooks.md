@@ -4,33 +4,33 @@
 
 Six executed quick-run notebooks explore graph regularization, regression and classification, solver behavior, streaming data, and reusable fitted artifacts.
 
-**The saved default outputs are read-only.** Live sliders, reruns, and larger experiments require a Python server with marimo and JAX. The hosted views below follow the preview branch; the source links and local setup use the pinned implementation revision.
+**The saved default outputs are read-only.** Live sliders, reruns, and larger experiments require a Python server with marimo and JAX. The six experiment views below are pinned to one presentation revision for reproducible review; the source links and local setup use the pinned numerical implementation revision.
 
 [Review pull request #5](https://github.com/tomshlomo/stratified-models/pull/5) · [Notebook guide](https://github.com/tomshlomo/stratified-models/blob/39f8289a3631e0477735450c2e7f731fb305ac2e/docs/notebooks.md) · [Source snapshot `39f8289`](https://github.com/tomshlomo/stratified-models/tree/39f8289a3631e0477735450c2e7f731fb305ac2e)
 
 ## Explore the notebooks
 
-1. **[Graph regression](https://molab.marimo.io/github/tomshlomo/stratified-models/blob/notebook-previews/examples/01_graph_regression.py)**  
+1. **[Graph regression](https://molab.marimo.io/github/tomshlomo/stratified-models/blob/f1c5091a744c24e0317840e0d060d751ce2d9acb/examples/01_graph_regression.py)**  
    See how graph structure, regularization and a missing training group shape coefficients and held-out error. Compare pooled, independent and stratified fits against known truth.  
    [Python source](https://github.com/tomshlomo/stratified-models/blob/39f8289a3631e0477735450c2e7f731fb305ac2e/examples/01_graph_regression.py)
 
-2. **[Mesothelioma classification](https://molab.marimo.io/github/tomshlomo/stratified-models/blob/notebook-previews/examples/02_mesothelioma.py)**  
+2. **[Mesothelioma classification](https://molab.marimo.io/github/tomshlomo/stratified-models/blob/f1c5091a744c24e0317840e0d060d751ce2d9acb/examples/02_mesothelioma.py)**  
    Review probability estimates, held-out scores and age/sex coefficient curves. The quick run is synthetic; the source includes the original-data, paper-method protocol.  
    [Python source](https://github.com/tomshlomo/stratified-models/blob/39f8289a3631e0477735450c2e7f731fb305ac2e/examples/02_mesothelioma.py)
 
-3. **[Spatial house prices](https://molab.marimo.io/github/tomshlomo/stratified-models/blob/notebook-previews/examples/03_house_prices.py)**  
+3. **[Spatial house prices](https://molab.marimo.io/github/tomshlomo/stratified-models/blob/f1c5091a744c24e0317840e0d060d751ce2d9acb/examples/03_house_prices.py)**  
    Inspect spatial coefficient maps and held-out log-price errors against pooled and separate models. The synthetic quick run introduces the full paper-method preset available in the source.  
    [Python source](https://github.com/tomshlomo/stratified-models/blob/39f8289a3631e0477735450c2e7f731fb305ac2e/examples/03_house_prices.py)
 
-4. **[Solver diagnostics and reuse](https://molab.marimo.io/github/tomshlomo/stratified-models/blob/notebook-previews/examples/04_solver_diagnostics.py)**  
+4. **[Solver diagnostics and reuse](https://molab.marimo.io/github/tomshlomo/stratified-models/blob/f1c5091a744c24e0317840e0d060d751ce2d9acb/examples/04_solver_diagnostics.py)**  
    Compare eligible solvers on the same objective. Inspect ADMM residual thresholds, numerical certificates, typed nonconvergence, warm starts and shared numerical caches.  
    [Python source](https://github.com/tomshlomo/stratified-models/blob/39f8289a3631e0477735450c2e7f731fb305ac2e/examples/04_solver_diagnostics.py)
 
-5. **[Streaming and composition](https://molab.marimo.io/github/tomshlomo/stratified-models/blob/notebook-previews/examples/05_streaming.py)**  
+5. **[Streaming and composition](https://molab.marimo.io/github/tomshlomo/stratified-models/blob/f1c5091a744c24e0317840e0d060d751ce2d9acb/examples/05_streaming.py)**  
    Follow one data snapshot through in-memory and batched fitting with pandas, Polars or Parquet. Compare results, explicit preprocessing, bin boundaries and data-replay costs.  
    [Python source](https://github.com/tomshlomo/stratified-models/blob/39f8289a3631e0477735450c2e7f731fb305ac2e/examples/05_streaming.py)
 
-6. **[From experiment to artifact](https://molab.marimo.io/github/tomshlomo/stratified-models/blob/notebook-previews/examples/06_workflow.py)**  
+6. **[From experiment to artifact](https://molab.marimo.io/github/tomshlomo/stratified-models/blob/f1c5091a744c24e0317840e0d060d751ce2d9acb/examples/06_workflow.py)**  
    Review discrimination and calibration, fold-isolated tuning, sklearn cloning and versioned prediction artifacts. See fitted components round-trip and failures stay explicit.  
    [Python source](https://github.com/tomshlomo/stratified-models/blob/39f8289a3631e0477735450c2e7f731fb305ac2e/examples/06_workflow.py)
 
@@ -65,4 +65,4 @@ uv run python scripts/export_notebook_sessions.py \
   notebook_exports/[0-9][0-9]_*.html
 ```
 
-The extractor checks the source hashes and restores every cell before writing a snapshot. Review the generated outputs, then explicitly add the selected JSON files with `git add -f examples/__marimo__/session/*.py.json`; this directory is otherwise ignored. Publishing these files to `notebook-previews` updates the linked molab views. The numerical implementation in this initial publication is commit `39f8289a3631e0477735450c2e7f731fb305ac2e`.
+The extractor checks the source hashes and restores every cell before writing a snapshot. Review the generated outputs, then explicitly add the selected JSON files with `git add -f examples/__marimo__/session/*.py.json`; this directory is otherwise ignored. Commit the refreshed experiment sources and snapshots, update the six gallery links to that commit, then re-export the gallery and its session snapshot. Publishing the updated gallery to `notebook-previews` refreshes the gallery entry point while older pinned reviews remain available. The numerical implementation in this initial publication is commit `39f8289a3631e0477735450c2e7f731fb305ac2e`.
