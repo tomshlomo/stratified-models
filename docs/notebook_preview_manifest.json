@@ -1,0 +1,83 @@
+{
+  "implementation_commit": "39f8289a3631e0477735450c2e7f731fb305ac2e",
+  "kind": "Executed quick-default notebook snapshots; native Python required for recomputation.",
+  "notebooks": [
+    {
+      "path": "examples/__marimo__/session/00_review_gallery.py.json",
+      "bytes": 6558,
+      "cells": 2,
+      "source_sha256": "7bb861df2296ffa42f2d01d14a33c63bf6fcefa7854d0e8c484a3c35e0439c40",
+      "session_sha256": "8270dce740a36454bc526cd1598f7b35496b3fd6b92ea7007a999b7ff6ecd0cc",
+      "schema_version": "1",
+      "marimo_version": "0.19.6",
+      "source_hashes_match": true,
+      "error_outputs": 0
+    },
+    {
+      "path": "examples/__marimo__/session/01_graph_regression.py.json",
+      "bytes": 615119,
+      "cells": 12,
+      "source_sha256": "30b452cdae77dc9c1152e1b3bb9f61a1e5e64e7e1fd3e48bed55ffe0e84167ba",
+      "session_sha256": "c87c23c78c44c846fc777d1d3f3cf9c1bf81e485f96be8793d251458da21f451",
+      "schema_version": "1",
+      "marimo_version": "0.19.6",
+      "source_hashes_match": true,
+      "error_outputs": 0
+    },
+    {
+      "path": "examples/__marimo__/session/02_mesothelioma.py.json",
+      "bytes": 206578,
+      "cells": 11,
+      "source_sha256": "38b9413b372093f22527057d473d1ddd7bbc11d92a845632f653a482855560ea",
+      "session_sha256": "4348a93eca401701361eb1dd9f74b3936e33299799c50c3b364fa1ef78114b69",
+      "schema_version": "1",
+      "marimo_version": "0.19.6",
+      "source_hashes_match": true,
+      "error_outputs": 0
+    },
+    {
+      "path": "examples/__marimo__/session/03_house_prices.py.json",
+      "bytes": 195024,
+      "cells": 11,
+      "source_sha256": "e79badc997c07fdf4c4937de7b7292c7d2845a380b723ff1f6c3e5c29a5752c8",
+      "session_sha256": "caeb99ff34dc5f3b95c6254b8507881d25aff1f04790595037ea9d596f178acb",
+      "schema_version": "1",
+      "marimo_version": "0.19.6",
+      "source_hashes_match": true,
+      "error_outputs": 0
+    },
+    {
+      "path": "examples/__marimo__/session/04_solver_diagnostics.py.json",
+      "bytes": 347978,
+      "cells": 15,
+      "source_sha256": "c81184844df0ac19c9d7c1e1abe09e4f5e50ee69a073788367971469a9ba5d7a",
+      "session_sha256": "a41043329a4bb2de65be59bbc68cc64b2303e667eaac3290042c4f31978f3f42",
+      "schema_version": "1",
+      "marimo_version": "0.19.6",
+      "source_hashes_match": true,
+      "error_outputs": 0
+    },
+    {
+      "path": "examples/__marimo__/session/05_streaming.py.json",
+      "bytes": 244401,
+      "cells": 14,
+      "source_sha256": "6926576eb7ae0b6976556ec937999d61d764a44fa3a536c22eea65844de4ec4a",
+      "session_sha256": "b9781be56d6740e0ac6bb92ad2b3ce1f576d4607da567abc217562e40ce34dd3",
+      "schema_version": "1",
+      "marimo_version": "0.19.6",
+      "source_hashes_match": true,
+      "error_outputs": 0
+    },
+    {
+      "path": "examples/__marimo__/session/06_workflow.py.json",
+      "bytes": 329619,
+      "cells": 17,
+      "source_sha256": "4889580b11039ca6732bf3056ec6c729a956cdc0e4530e91ba59a5774b235c13",
+      "session_sha256": "a3387148f6f6934422d52210670d256991c550d61d5141c5259e7d9d659070ee",
+      "schema_version": "1",
+      "marimo_version": "0.19.6",
+      "source_hashes_match": true,
+      "error_outputs": 0
+    }
+  ]
+}

@@ -6,6 +6,8 @@ The library provides immutable model recipes and fitted predictors, explicit pre
 
 ## Explore the notebooks
 
+Browse the [hosted notebook gallery](docs/hosted_notebooks.md) for saved quick-run outputs and local run instructions.
+
 The six marimo notebooks are the main guided review of the library. They include interactive experiments, numerical checks, solver comparisons, streaming workflows, and quick/full paper reproduction presets.
 
 ```sh
