@@ -6,7 +6,7 @@ __generated_with = "0.19.6"
 app = marimo.App(width="full", app_title="Borrowing strength across a graph")
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _():
     import json
 
@@ -66,7 +66,7 @@ def _():
     )
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
     # Borrowing strength across a graph
@@ -87,7 +87,7 @@ def _(mo):
     return
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(graph_weight, l1_weight, l2_weight, mo):
     _api_example = f'''features = ("x", "noise", "intercept")
     recipe = Pipeline(
@@ -114,7 +114,7 @@ def _(graph_weight, l1_weight, l2_weight, mo):
     return
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(mo):
     graph_choice = mo.ui.dropdown(
         options=["Path", "Ring", "Deliberately mismatched"],
@@ -149,7 +149,7 @@ def _(mo):
     return graph_choice, smoothing_log10, sparsity_enabled, sparsity_log10
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(synthetic_regression):
     train_x, train_y, test_x, test_y, true_coefficients = synthetic_regression()
     untouched_train = train_x.copy(deep=True)
@@ -165,7 +165,7 @@ def _(synthetic_regression):
     )
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(
     ADMM,
     AddIntercept,
@@ -248,7 +248,7 @@ def _(
     )
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(graph_weight, l1_weight, l2_weight, mo, training_counts):
     mo.vstack(
         [
@@ -275,7 +275,7 @@ def _(graph_weight, l1_weight, l2_weight, mo, training_counts):
     return
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(
     COLORS,
     fitted_models,
@@ -305,7 +305,7 @@ def _(
     return
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(
     COLORS,
     fitted_models,
@@ -357,7 +357,7 @@ def _(
     return score_table, test_predictions
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(diagnostics_summary, fitted_results, mo, pd, score_table):
     solve_table = pd.DataFrame(
         [{"model": name, **diagnostics_summary(result.diagnostics)} for name, result in fitted_results.items()]
@@ -378,7 +378,7 @@ def _(diagnostics_summary, fitted_results, mo, pd, score_table):
     return
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(
     fitted_models,
     fitted_results,
@@ -399,7 +399,7 @@ def _(
     return (review_checks,)
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(
     graph_weight,
     json,

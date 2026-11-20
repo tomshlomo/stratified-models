@@ -4,14 +4,14 @@ __generated_with = "0.19.6"
 app = marimo.App(width="full", app_title="Age, sex, and borrowing strength")
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _():
     import marimo as mo
 
     return (mo,)
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
     # Age, sex, and borrowing strength
@@ -30,7 +30,7 @@ def _(mo):
     return
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _():
     import json
     import platform
@@ -108,7 +108,7 @@ def _():
     )
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(mo):
     preset = mo.ui.dropdown(
         ["Quick · synthetic adaptation", "Paper method · original UCI data"],
@@ -163,7 +163,7 @@ def _(mo):
     )
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(
     DataIntegrityError,
     Path,
@@ -206,7 +206,7 @@ def _(
     return age_nodes, dataset, paper_mode
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
     ## The recipe makes the modeling choices visible
@@ -231,7 +231,7 @@ def _(mo):
     return
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(
     AddIntercept,
     Axis,
@@ -296,7 +296,7 @@ def _(
     return (classification_recipe,)
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(
     ADMM,
     FitFailure,
@@ -436,7 +436,7 @@ def _(
     )
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(classification_elapsed, classification_summary, folds, mo, paper_mode, pd):
     _best_rows = (
         classification_summary[classification_summary["successful_folds"] == len(folds)]
@@ -472,7 +472,7 @@ def _(classification_elapsed, classification_summary, folds, mo, paper_mode, pd)
     return
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(
     age_nodes,
     classification_summary,
@@ -529,7 +529,7 @@ def _(
     return (classification_figure,)
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(
     AUTHOR_CODE_URL,
     MESOTHELIOMA,

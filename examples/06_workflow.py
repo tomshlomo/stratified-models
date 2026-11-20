@@ -9,7 +9,7 @@ app = marimo.App(
 )
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _():
     import hashlib
     import json
@@ -105,7 +105,7 @@ def _():
     )
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
     # From a fitted pipeline to a reusable artifact
@@ -126,7 +126,7 @@ def _(mo):
     return
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(mo):
     mo.accordion(
         {"Public API: handle a fitted outcome and persist prediction state": mo.md(
@@ -147,7 +147,7 @@ def _(mo):
     return
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(mo):
     workflow_graph_weight = mo.ui.slider(
         start=-4.0, stop=-1.0, step=0.5, value=-2.0,
@@ -157,7 +157,7 @@ def _(mo):
     return (workflow_graph_weight,)
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(
     ADMM,
     AddIntercept,
@@ -215,7 +215,7 @@ def _(
     )
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(
     average_precision_score,
     classification_metrics,
@@ -247,7 +247,7 @@ def _(
     return (probability_metrics,)
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(
     COLORS,
     calibration_bins,
@@ -292,7 +292,7 @@ def _(
     return
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(mo):
     threshold_control = mo.ui.slider(
         start=0.1, stop=0.9, step=0.05, value=0.5,
@@ -312,7 +312,7 @@ def _(mo):
     return (threshold_control,)
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(
     ConfusionMatrixDisplay,
     classifier,
@@ -335,7 +335,7 @@ def _(
     return
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(mo):
     tuning_form = mo.ui.dictionary(
         {"trials": mo.ui.dropdown(options=[2, 6, 20], value=2, label="Explicit trial budget")}
@@ -356,7 +356,7 @@ def _(mo):
     return (tuning_form,)
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(
     BinaryLogLoss,
     Fold,
@@ -420,7 +420,7 @@ def _(
     return
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(
     StratifiedBinaryClassifier,
     classification_metrics,
@@ -465,7 +465,7 @@ def _(
     return (sklearn_matches_native,)
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(
     Path,
     classifier,
@@ -510,7 +510,7 @@ def _(
     return artifact_checksum_matches, artifact_prediction_error
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(
     AddIntercept,
     ArtifactError,
@@ -593,7 +593,7 @@ def _(
     return custom_round_trip, missing_codec_rejected
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(
     ADMM,
     FitFailure,
@@ -639,7 +639,7 @@ def _(
     return
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(
     artifact_checksum_matches,
     artifact_prediction_error,
@@ -671,7 +671,7 @@ def _(
     return (review_checks,)
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(json, mo, package_versions, probability_metrics, review_checks):
     workflow_record = {
         "seed": 71,

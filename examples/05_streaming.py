@@ -9,7 +9,7 @@ app = marimo.App(
 )
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _():
     import importlib.util
     import json
@@ -78,7 +78,7 @@ def _():
     )
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
     # One objective, in memory or in batches
@@ -100,7 +100,7 @@ def _(mo):
     return
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(mo):
     mo.accordion(
         {"Public API: one recipe, two execution entry points": mo.md(
@@ -123,7 +123,7 @@ def _(mo):
     return
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(importlib, mo):
     _source_options = ["pandas"]
     if importlib.util.find_spec("polars") is not None:
@@ -147,7 +147,7 @@ def _(importlib, mo):
     return batch_control, source_control, stream_task
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(
     AddIntercept,
     Axis,
@@ -207,7 +207,7 @@ def _(
     )
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(
     Path,
     batch_control,
@@ -241,7 +241,7 @@ def _(
     return observed_batch_sizes, selected_features, selected_source
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(
     PreparationOptions,
     fit,
@@ -271,7 +271,7 @@ def _(
     return batched_model, batched_result, in_memory_model, in_memory_result
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(
     batched_model,
     batched_result,
@@ -333,7 +333,7 @@ def _(
     return coefficient_difference, prediction_difference
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(
     COLORS,
     batched_model,
@@ -374,7 +374,7 @@ def _(
     return
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(batched_model, mo, np, selected_features, stream_task, stream_train):
     if stream_task.value == "Squared regression":
         with batched_model.predict_batches(selected_features) as _prediction_stream:
@@ -396,7 +396,7 @@ def _(batched_model, mo, np, selected_features, stream_task, stream_train):
     return (prediction_stream_agrees,)
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(FixedWidthBins, compose, from_pandas, mo, np, pd):
     binning_component = FixedWidthBins(
         column="age", output="age_band", origin=0.0, width=10.0, n_bins=11,
@@ -424,7 +424,7 @@ def _(FixedWidthBins, compose, from_pandas, mo, np, pd):
     return (observed_bins,)
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(mo):
     large_run_form = mo.ui.dictionary(
         {
@@ -447,7 +447,7 @@ def _(mo):
     return (large_run_form,)
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(
     AddIntercept,
     Axis,
@@ -544,7 +544,7 @@ def _(
     return
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(
     batched_result,
     coefficient_difference,

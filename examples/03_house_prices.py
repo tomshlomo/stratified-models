@@ -4,14 +4,14 @@ __generated_with = "0.19.6"
 app = marimo.App(width="full", app_title="A map of local housing models")
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _():
     import marimo as mo
 
     return (mo,)
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
     # A map of local housing models
@@ -28,7 +28,7 @@ def _(mo):
     return
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _():
     import json
     import platform
@@ -116,7 +116,7 @@ def _():
     )
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(mo):
     preset = mo.ui.dropdown(
         ["Quick · synthetic adaptation", "Paper method · original King County data"],
@@ -171,7 +171,7 @@ def _(mo):
     )
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(
     DataIntegrityError,
     Path,
@@ -215,7 +215,7 @@ def _(
     return dataset, grid_size, paper_mode
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
     ## A geographical model is an explicit composition
@@ -244,7 +244,7 @@ def _(mo):
     return
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(
     AddIntercept,
     Axis,
@@ -328,7 +328,7 @@ def _(
     return (housing_recipe,)
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(
     ADMM,
     AutoSolver,
@@ -469,7 +469,7 @@ def _(
     )
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(folds, housing_elapsed, housing_summary, mo, paper_mode):
     _best = (
         housing_summary[housing_summary["successful_folds"] == len(folds)]
@@ -506,7 +506,7 @@ def _(folds, housing_elapsed, housing_summary, mo, paper_mode):
     return
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(
     HOUSE_LATITUDE,
     HOUSE_LONGITUDE,
@@ -563,7 +563,7 @@ def _(
     return (housing_figure,)
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(
     AUTHOR_CODE_URL,
     KING_COUNTY,

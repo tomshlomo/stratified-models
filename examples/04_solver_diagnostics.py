@@ -9,7 +9,7 @@ app = marimo.App(
 )
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _():
     import importlib.util
 
@@ -87,7 +87,7 @@ def _():
     )
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
     # Solvers, convergence, and reusable work
@@ -106,7 +106,7 @@ def _(mo):
     return
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(mo):
     mo.accordion(
         {
@@ -147,7 +147,7 @@ def _(mo):
     return
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(importlib, mo):
     task_control = mo.ui.dropdown(
         options=["Squared regression", "Binary logistic"],
@@ -169,7 +169,7 @@ def _(importlib, mo):
     return l1_control, reference_control, rho_control, task_control
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(
     AddIntercept,
     Axis,
@@ -216,7 +216,7 @@ def _(
     return (prepared_problem,)
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(
     ADMM,
     AutoSolver,
@@ -257,7 +257,7 @@ def _(
     return comparison_results, reference_name, reference_objective
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(
     comparison_results,
     diagnostics_summary,
@@ -311,7 +311,7 @@ def _(
     return
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(
     COLORS,
     comparison_results,
@@ -352,7 +352,7 @@ def _(
     return
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
     ADMM's raw objective need not decrease on every iteration. A flat objective
@@ -373,7 +373,7 @@ def _(mo):
     return
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(
     ADMM,
     SolveSession,
@@ -417,7 +417,7 @@ def _(
     )
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(mo, reuse_table):
     mo.vstack(
         [
@@ -434,7 +434,7 @@ def _(mo, reuse_table):
     return
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(
     ADMM,
     FitFailure,
@@ -462,7 +462,7 @@ def _(
     return (limited_result,)
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(mo):
     weight_path_button = mo.ui.run_button(label="Run a regularization path with warm starts")
     mo.vstack(
@@ -479,7 +479,7 @@ def _(mo):
     return (weight_path_button,)
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(
     diagnostics_summary,
     mo,
@@ -501,7 +501,7 @@ def _(
     return
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(
     FitFailure,
     cache_result,
