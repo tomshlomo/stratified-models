@@ -1,0 +1,79 @@
+---
+globs: *.py
+alwaysApply: false
+description: Rules for logging
+---
+# Python Library Logging Rules (structlog)
+
+You are working on a Python library. Follow these strict logging guidelines to ensure composability and structured data integrity.
+
+## 1. Library vs. Application Responsibility
+
+### Library Code (`src/`)
+* **NEVER** configure the logger (no `structlog.configure`).
+* **NEVER** add handlers (no `StreamHandler`, `FileHandler`, etc.).
+* **NEVER** use `print()` statements.
+* **DO** assume the consuming application will handle rendering (JSON, Console, etc.).
+
+### Scripts & Examples (`scripts/`, `examples/`, `main.py`)
+* **DO** configure the logger at the entry point.
+* **DO** set up formatters (e.g., `ConsoleRenderer` for dev, `JSONRenderer` for prod).
+
+## 2. Logger Instantiation
+
+Always instantiate the logger at the module level using `get_logger()`.
+
+```python
+import structlog
+
+# DO:
+logger = structlog.get_logger()
+
+# DON'T:
+logger = structlog.get_logger(__name__) # strictly not necessary with structlog, but acceptable if wrapping stdlib
+
+```
+
+## 3. Structured Logging Practices
+
+### Static Event Names
+
+The first argument (the event) must be a static string describing *what happened*. Do not embed variables in this string.
+
+```python
+# DO:
+logger.info("user_login_failed", user_id=user.id, reason="invalid_password")
+
+# DON'T (Hard to aggregate):
+logger.info(f"User {user.id} failed to login because of invalid_password")
+
+```
+
+### Contextual Data
+
+Pass data as keyword arguments. Use consistent keys across the library (e.g., always use `user_id`, never switch between `uid` and `user_id`).
+
+### Exception Handling
+
+Use `logger.exception` inside `except` blocks to automatically capture traceback info.
+
+```python
+try:
+    process_data(data)
+except ValueError:
+    # DO:
+    logger.exception("data_processing_failed", data_id=data.id)
+
+```
+
+## 4. Integration with Standard Library (Optional but Recommended)
+
+If the library needs to support legacy standard logging users, ensure `structlog` is wrapped correctly in the documentation or logic, but **do not** impose the `logging` module configuration on the user.
+
+## 5. Testing Logging
+
+When writing tests:
+
+* Use `structlog.testing.capture_logs` if you need to verify log entries.
+* Assert on the `event` name and specific context keys.
+

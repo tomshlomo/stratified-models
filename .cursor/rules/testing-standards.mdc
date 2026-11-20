@@ -1,0 +1,50 @@
+---
+globs: *.py
+alwaysApply: false
+description: Standards for writing tests
+---
+# Testing Standards
+
+## Test Organization
+- Tests should be placed in the same directory structure as the code they test
+  - Example: `data/` modules → `data/tests/`
+- Use relative imports for shared fixtures: `from .conftest import ...`
+- Use plain functions for tests, not classes (unless there's a good reason like shared fixtures that can't be extracted)
+
+## Mocking Strategy
+- **Mock at the lowest level possible** to test more of the actual code path
+  - This allows the actual function logic to be tested
+- Use `unittest.mock.patch` to mock functions where they're used (e.g., `patch("utils.snowflake.pd.read_sql_query")`)
+
+## Configuration and Environment
+- Use pytest configuration for test-specific environment variables
+  - Add `pytest-env` plugin to dev dependencies
+  - Configure in `pyproject.toml` under `[tool.pytest.ini_options]`:
+    ```toml
+    [tool.pytest.ini_options]
+    env = [
+        "USE_LOCAL_CACHE = false",
+        "USE_S3_CACHE = false",
+    ]
+    ```
+- Avoid global side effects in test files (like setting environment variables at module level)
+- Use fixtures instead of global setup/teardown code
+
+## Fixtures
+- Use session-scoped autouse fixtures for one-time setup (e.g., cache directory clearing)
+- Place shared fixtures in `conftest.py`
+- Use module-level fixtures when needed, but prefer placing them in `conftest.py` if shared across multiple test files
+- Fixtures should be simple and focused - avoid complex logic in fixtures
+
+## Test Design
+- **Don't over-test**: Avoid overlapping tests that test the same functionality
+  - If a high-level function calls multiple lower-level functions, test the high-level function rather than each individual function
+- Test edge cases and error conditions
+- Test the public API, not internal implementation details
+- Use descriptive test names that explain what is being tested
+
+## Test Structure
+- Keep tests focused and simple
+- Avoid testing private helper methods unless they have complex logic that isn't covered by higher-level tests
+- Group related assertions in a single test rather than splitting into many small tests
+- Use fixtures to avoid code duplication

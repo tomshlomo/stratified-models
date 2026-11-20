@@ -1,0 +1,25 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+.cache/
+# Virtual environments
+.venv
+logs/
+.ruff_cache/
+.mypy_cache/
+.pytest_cache/
+
+examples/__marimo__/.DS_Store
+examples/__marimo__/session/housing.py.json
+*/.DS_Store
+
+.DS_Store
+examples/__marimo__/
+notebook_exports/
+data/
+artifacts/
+.config/

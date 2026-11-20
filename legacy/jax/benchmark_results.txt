@@ -1,0 +1,66 @@
+=== Baseline (no jit) ===
+Date: Tue Jan 27 15:15:22 IST 2026
+Args: --benchmark_config.kmeans_k 10 --benchmark_config.house_age_bins 5 --benchmark_config.n_folds 2 --benchmark_config.n_trials 5
+Running benchmark with config: BenchmarkConfig(kmeans_k=10, house_age_bins=5, newton_max_iters=10, cg_max_iters=100, random_seed=42, n_folds=2, n_trials=5, timeout=None)
+Starting tuning...
+2026-01-27 15:15:24 [info     ] tuning_compile_folds_start     n_folds=2 n_rows=16512
+2026-01-27 15:15:24 [info     ] pipeline_fit_transformers_start normalize=True normalize_target=True num_stratifiers=2 rows=8256
+2026-01-27 15:15:24 [info     ] pipeline_stratifier_fit_start  num_features=1 stratifier_fitter=QuantilesBinning
+2026-01-27 15:15:24 [info     ] binning_stratifier_fit_start   feature_name=HouseAge fitter=QuantilesBinning rows=8256
+2026-01-27 15:15:24 [info     ] regularization_graph_path_created name=HouseAge_bin num_edges=4 num_nodes=5
+2026-01-27 15:15:24 [info     ] binning_stratifier_fit_complete fitter=QuantilesBinning num_bins=5 out_feature_name=HouseAge_bin
+2026-01-27 15:15:24 [info     ] pipeline_stratifier_fit_complete out_feature_name=HouseAge_bin stratifier=BinningStratifier
+2026-01-27 15:15:24 [info     ] pipeline_stratifier_fit_start  num_features=2 stratifier_fitter=KMeansStratifierFitter
+2026-01-27 15:15:24 [info     ] kmeans_stratifier_fit_start    n_clusters=10 n_features=2 n_samples=8256 out_feature_name=Location_cluster
+2026-01-27 15:15:24 [info     ] regularization_graph_voronoi_created name=Location_cluster num_edges=21 num_nodes=10
+2026-01-27 15:15:24 [info     ] kmeans_stratifier_fit_complete n_clusters=10 out_feature_name=Location_cluster
+2026-01-27 15:15:24 [info     ] pipeline_stratifier_fit_complete out_feature_name=Location_cluster stratifier=KMeansStratifier
+2026-01-27 15:15:24 [debug    ] pipeline_fit_normalized        num_regression_features=5 rows=8256
+2026-01-27 15:15:24 [debug    ] pipeline_fit_target_normalized rows=8256
+2026-01-27 15:15:24 [debug    ] stratifier_transform_start     out_feature_name=HouseAge_bin rows=8256 stratifier=BinningStratifier
+2026-01-27 15:15:24 [debug    ] binning_stratifier_transform_start num_bins=5 out_feature_name=HouseAge_bin rows=8256
+2026-01-27 15:15:24 [debug    ] stratifier_transform_start     out_feature_name=Location_cluster rows=8256 stratifier=KMeansStratifier
+2026-01-27 15:15:24 [debug    ] kmeans_stratifier_transform_start n_clusters=10 out_feature_name=Location_cluster rows=8256
+2026-01-27 15:15:24 [debug    ] pipeline_transform_normalized  num_regression_features=5 rows=8256
+2026-01-27 15:15:24 [debug    ] pipeline_transform_intercept_added rows=8256
+2026-01-27 15:15:24 [info     ] pipeline_build_solver_problem_start rows=8256
+2026-01-27 15:15:24 [info     ] pipeline_compile_start         num_graphs=2 num_regularizers=0 rows=8256 solver=NewtonSolver
+2026-01-27 15:15:24 [debug    ] abstract_problem_group_losses_start rows=8256
+2026-01-27 15:15:24 [debug    ] abstract_problem_group_data_start groupby_cols=['HouseAge_bin', 'Location_cluster'] rows=8256
+2026-01-27 15:15:24 [debug    ] abstract_problem_laplacians_start dims=(5, 10, 6) num_graphs=2
+2026-01-27 15:15:24 [debug    ] abstract_problem_laplacians_graph graph_index=0 graph_name=HouseAge_bin graph_size=5
+2026-01-27 15:15:24 [debug    ] abstract_problem_laplacians_graph graph_index=1 graph_name=Location_cluster graph_size=10
+2026-01-27 15:15:24 [info     ] pipeline_compile_complete      solver=NewtonSolver
+2026-01-27 15:15:24 [info     ] tuning_compile_fold_complete   fold_idx=0
+2026-01-27 15:15:24 [info     ] pipeline_fit_transformers_start normalize=True normalize_target=True num_stratifiers=2 rows=8256
+2026-01-27 15:15:24 [info     ] pipeline_stratifier_fit_start  num_features=1 stratifier_fitter=QuantilesBinning
+2026-01-27 15:15:24 [info     ] binning_stratifier_fit_start   feature_name=HouseAge fitter=QuantilesBinning rows=8256
+2026-01-27 15:15:24 [info     ] regularization_graph_path_created name=HouseAge_bin num_edges=4 num_nodes=5
+2026-01-27 15:15:24 [info     ] binning_stratifier_fit_complete fitter=QuantilesBinning num_bins=5 out_feature_name=HouseAge_bin
+2026-01-27 15:15:24 [info     ] pipeline_stratifier_fit_complete out_feature_name=HouseAge_bin stratifier=BinningStratifier
+2026-01-27 15:15:24 [info     ] pipeline_stratifier_fit_start  num_features=2 stratifier_fitter=KMeansStratifierFitter
+2026-01-27 15:15:24 [info     ] kmeans_stratifier_fit_start    n_clusters=10 n_features=2 n_samples=8256 out_feature_name=Location_cluster
+2026-01-27 15:15:24 [info     ] regularization_graph_voronoi_created name=Location_cluster num_edges=20 num_nodes=10
+2026-01-27 15:15:24 [info     ] kmeans_stratifier_fit_complete n_clusters=10 out_feature_name=Location_cluster
+2026-01-27 15:15:24 [info     ] pipeline_stratifier_fit_complete out_feature_name=Location_cluster stratifier=KMeansStratifier
+2026-01-27 15:15:24 [debug    ] pipeline_fit_normalized        num_regression_features=5 rows=8256
+2026-01-27 15:15:24 [debug    ] pipeline_fit_target_normalized rows=8256
+2026-01-27 15:15:24 [debug    ] stratifier_transform_start     out_feature_name=HouseAge_bin rows=8256 stratifier=BinningStratifier
+2026-01-27 15:15:24 [debug    ] binning_stratifier_transform_start num_bins=5 out_feature_name=HouseAge_bin rows=8256
+2026-01-27 15:15:24 [debug    ] stratifier_transform_start     out_feature_name=Location_cluster rows=8256 stratifier=KMeansStratifier
+2026-01-27 15:15:24 [debug    ] kmeans_stratifier_transform_start n_clusters=10 out_feature_name=Location_cluster rows=8256
+2026-01-27 15:15:24 [debug    ] pipeline_transform_normalized  num_regression_features=5 rows=8256
+2026-01-27 15:15:24 [debug    ] pipeline_transform_intercept_added rows=8256
+2026-01-27 15:15:24 [info     ] pipeline_build_solver_problem_start rows=8256
+2026-01-27 15:15:24 [info     ] pipeline_compile_start         num_graphs=2 num_regularizers=0 rows=8256 solver=NewtonSolver
+2026-01-27 15:15:24 [debug    ] abstract_problem_group_losses_start rows=8256
+2026-01-27 15:15:24 [debug    ] abstract_problem_group_data_start groupby_cols=['HouseAge_bin', 'Location_cluster'] rows=8256
+2026-01-27 15:15:24 [debug    ] abstract_problem_laplacians_start dims=(5, 10, 6) num_graphs=2
+2026-01-27 15:15:24 [debug    ] abstract_problem_laplacians_graph graph_index=0 graph_name=HouseAge_bin graph_size=5
+2026-01-27 15:15:24 [debug    ] abstract_problem_laplacians_graph graph_index=1 graph_name=Location_cluster graph_size=10
+2026-01-27 15:15:24 [info     ] pipeline_compile_complete      solver=NewtonSolver
+2026-01-27 15:15:24 [info     ] tuning_compile_fold_complete   fold_idx=1
+[32m[I 2026-01-27 15:15:24,559][0m A new study created in memory with name: no-name-1291e8f0-7822-4ec5-a09b-577d388f306c[0m
+2026-01-27 15:15:24 [info     ] tuning_optimize_start          n_trials=5 timeout=None
+  0%|          | 0/5 [00:00<?, ?it/s]2026-01-27 15:15:24 [info     ] pipeline_solve_start           solver=NewtonSolver
+2026-01-27 15:15:32 [debug    ] newton_iteration               grad_norm=1631.88427734375 iteration=1 objective_value=4128.0

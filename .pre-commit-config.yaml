@@ -1,24 +1,11 @@
+exclude: ^(legacy/|examples/)
+
+ci:
+  autofix_prs: false
+
 repos:
-  - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v2.3.0
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.14.13
     hooks:
-      - id: check-yaml
-      - id: end-of-file-fixer
-      - id: trailing-whitespace
-  - repo: https://github.com/pycqa/isort
-    rev: 5.12.0
-    hooks:
-      - id: isort
-        name: isort (python)
-  - repo: local
-    hooks:
-      - id: black
-        name: black
-        entry: poetry run black
-        language: system
-        types: [ python ]
-      - id: flake8
-        name: flake8
-        entry: poetry run flake8
-        language: system
-        types: [ python ]
+      - id: ruff-check
+      - id: ruff-format

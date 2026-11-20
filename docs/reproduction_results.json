@@ -1,0 +1,321 @@
+{
+  "schema_version": 1,
+  "paper_url": "https://web.stanford.edu/~boyd/papers/pdf/strat_models.pdf",
+  "runs": [
+    {
+      "id": "mesothelioma_excluded_intercept",
+      "experiment": "mesothelioma \u00a75.1",
+      "data_sha256": "cb3a7b5b9352ff30224f5080769db031339dd78c5a4ffb6860cb2a2a54cba73f",
+      "source_url": "https://doi.org/10.24432/C5903T",
+      "n_observations": 324,
+      "n_covariates": 46,
+      "n_folds": 5,
+      "fold_seed": 41,
+      "fold_assignments_sha256": "21bf5bd23433e2ad6fe60182b1c0c77e08833257228b5b260231caa54c7ba169",
+      "objective_convention": "mean binary logistic; summed-objective penalty weights / training fold N",
+      "solver": {
+        "name": "Newton",
+        "configuration": {
+          "max_iterations": 50,
+          "atol": 1e-07,
+          "rtol": 1e-07,
+          "cg_max_iterations": 200,
+          "max_passes": null
+        }
+      },
+      "local_l2_includes_intercept": false,
+      "graph_multiplier": 1.0,
+      "candidate_multipliers": [
+        1.0
+      ],
+      "versions": {
+        "python": "3.13.5",
+        "stratified-models": "0.2.0",
+        "numpy": "2.4.1",
+        "jax": "0.9.0",
+        "scipy": "1.17.0",
+        "pandas": "3.0.0",
+        "scikit-learn": "1.8.0",
+        "marimo": "0.19.6"
+      },
+      "measured_scores": [
+        {
+          "model": "Common",
+          "multiplier": 1.0,
+          "anll": 0.673198497996133,
+          "fold_sd": 0.098011123997384,
+          "error": 0.330240384615385,
+          "successful_folds": 5
+        },
+        {
+          "model": "Separate",
+          "multiplier": 1.0,
+          "anll": 1.980610790461241,
+          "fold_sd": 0.347177502100118,
+          "error": 0.413653846153846,
+          "successful_folds": 5
+        },
+        {
+          "model": "Stratified",
+          "multiplier": 1.0,
+          "anll": 0.569281186496565,
+          "fold_sd": 0.009019239688592,
+          "error": 0.280865384615385,
+          "successful_folds": 5
+        }
+      ],
+      "numerical_fits": 16,
+      "all_recorded_numerical_fits_converged": true,
+      "sum_numerical_fit_seconds": 22.092188492999412,
+      "largest_recorded_stationarity": 1.215749987656213e-07,
+      "recorded_at_utc": "2026-11-20T08:43:53.874369+00:00",
+      "evidence_manifest": "notebook_exports/evidence/mesothelioma_excluded_intercept_manifest.json",
+      "interpretation": "Measured original-data five-fold experiment. Fold identity and implementation differ from the authors; this is not a claim of matching the published table."
+    },
+    {
+      "id": "mesothelioma_included_intercept",
+      "experiment": "mesothelioma \u00a75.1",
+      "data_sha256": "cb3a7b5b9352ff30224f5080769db031339dd78c5a4ffb6860cb2a2a54cba73f",
+      "source_url": "https://doi.org/10.24432/C5903T",
+      "n_observations": 324,
+      "n_covariates": 46,
+      "n_folds": 5,
+      "fold_seed": 41,
+      "fold_assignments_sha256": "21bf5bd23433e2ad6fe60182b1c0c77e08833257228b5b260231caa54c7ba169",
+      "objective_convention": "mean binary logistic; summed-objective penalty weights / training fold N",
+      "solver": {
+        "name": "Newton",
+        "configuration": {
+          "max_iterations": 50,
+          "atol": 1e-07,
+          "rtol": 1e-07,
+          "cg_max_iterations": 200,
+          "max_passes": null
+        }
+      },
+      "local_l2_includes_intercept": true,
+      "graph_multiplier": 1.0,
+      "candidate_multipliers": [
+        1.0
+      ],
+      "versions": {
+        "python": "3.13.5",
+        "stratified-models": "0.2.0",
+        "numpy": "2.4.1",
+        "jax": "0.9.0",
+        "scipy": "1.17.0",
+        "pandas": "3.0.0",
+        "scikit-learn": "1.8.0",
+        "marimo": "0.19.6"
+      },
+      "measured_scores": [
+        {
+          "model": "Common",
+          "multiplier": 1.0,
+          "anll": 0.673187463781541,
+          "fold_sd": 0.098007028861764,
+          "error": 0.330240384615385,
+          "successful_folds": 5
+        },
+        {
+          "model": "Separate",
+          "multiplier": 1.0,
+          "anll": 0.688966980464421,
+          "fold_sd": 0.006139295325818,
+          "error": 0.512259615384615,
+          "successful_folds": 5
+        },
+        {
+          "model": "Stratified",
+          "multiplier": 1.0,
+          "anll": 0.595780001975802,
+          "fold_sd": 0.012206527190324,
+          "error": 0.287067307692308,
+          "successful_folds": 5
+        }
+      ],
+      "numerical_fits": 16,
+      "all_recorded_numerical_fits_converged": true,
+      "sum_numerical_fit_seconds": 13.519213654013583,
+      "largest_recorded_stationarity": 1.296468201986097e-07,
+      "recorded_at_utc": "2026-11-20T08:45:37.385439+00:00",
+      "evidence_manifest": "notebook_exports/evidence/mesothelioma_included_intercept_manifest.json",
+      "interpretation": "Measured original-data five-fold experiment. Fold identity and implementation differ from the authors; this is not a claim of matching the published table."
+    },
+    {
+      "id": "king_county_cg1000_diagnostic",
+      "experiment": "King County \u00a75.2",
+      "data_sha256": "d0875baa0251b21d4bdc9d2ae940a4fe0bb6009824f23dd0e2a5b2bf04557b7e",
+      "source_url": "https://www.kaggle.com/datasets/harlfoxem/housesalesprediction",
+      "n_observations": 21596,
+      "n_covariates": 9,
+      "n_folds": 5,
+      "fold_seed": 17,
+      "fold_assignments_sha256": "c04e26c30bb3ba902d77d5b00331ca7aefed41622267d4bdf0656765572e5664",
+      "objective_convention": "half mean squared log-price residual; summed unhalved objective penalties / (2 training fold N)",
+      "solver": {
+        "name": "AutoSolver",
+        "configuration": {
+          "direct_max_bytes": 268435456
+        }
+      },
+      "local_l2_includes_intercept": false,
+      "graph_multiplier": 1.0,
+      "candidate_multipliers": [
+        1.0
+      ],
+      "versions": {
+        "python": "3.13.5",
+        "stratified-models": "0.2.0",
+        "numpy": "2.4.1",
+        "jax": "0.9.0",
+        "scipy": "1.17.0",
+        "pandas": "3.0.0",
+        "scikit-learn": "1.8.0",
+        "marimo": "0.19.6"
+      },
+      "measured_scores": [
+        {
+          "model": "Common",
+          "multiplier": 1.0,
+          "rmse": 0.315651102795266,
+          "fold_sd": 0.006783776155414,
+          "r2": 0.640006928255111,
+          "successful_folds": 5
+        },
+        {
+          "model": "Separate",
+          "multiplier": 1.0,
+          "rmse": null,
+          "fold_sd": null,
+          "r2": null,
+          "successful_folds": 0
+        },
+        {
+          "model": "Stratified",
+          "multiplier": 1.0,
+          "rmse": 0.176605958362908,
+          "fold_sd": 0.003482174127954,
+          "r2": 0.887318790411112,
+          "successful_folds": 5
+        },
+        {
+          "model": "Random forest",
+          "multiplier": 1.0,
+          "rmse": 0.180018621639878,
+          "fold_sd": 0.004320325833319,
+          "r2": 0.882958835067726,
+          "successful_folds": 5
+        }
+      ],
+      "numerical_fits": 15,
+      "all_recorded_numerical_fits_converged": false,
+      "sum_numerical_fit_seconds": 7.259448863987927,
+      "largest_recorded_stationarity": 6.49178355659686e-05,
+      "recorded_at_utc": "2026-11-20T08:45:37.837604+00:00",
+      "evidence_manifest": "notebook_exports/evidence/king_county_cg1000_diagnostic_manifest.json",
+      "interpretation": "Measured original-data five-fold experiment. Fold identity and implementation differ from the authors; this is not a claim of matching the published table.",
+      "grid_side_length": 50,
+      "forest": {
+        "trees": 100,
+        "candidate_minimum_leaf_sizes": [
+          1
+        ],
+        "n_jobs": 1
+      },
+      "purpose": "Initial solver-budget diagnostic; uncoupled baseline exhausted the global-CG iteration limit."
+    },
+    {
+      "id": "king_county_50x50",
+      "experiment": "King County \u00a75.2",
+      "data_sha256": "d0875baa0251b21d4bdc9d2ae940a4fe0bb6009824f23dd0e2a5b2bf04557b7e",
+      "source_url": "https://www.kaggle.com/datasets/harlfoxem/housesalesprediction",
+      "n_observations": 21596,
+      "n_covariates": 9,
+      "n_folds": 5,
+      "fold_seed": 17,
+      "fold_assignments_sha256": "c04e26c30bb3ba902d77d5b00331ca7aefed41622267d4bdf0656765572e5664",
+      "objective_convention": "half mean squared log-price residual; summed unhalved objective penalties / (2 training fold N)",
+      "solver": {
+        "name": "AutoSolver",
+        "configuration": {
+          "direct_max_bytes": 268435456
+        }
+      },
+      "local_l2_includes_intercept": false,
+      "graph_multiplier": 1.0,
+      "candidate_multipliers": [
+        1.0
+      ],
+      "versions": {
+        "python": "3.13.5",
+        "stratified-models": "0.2.0",
+        "numpy": "2.4.1",
+        "jax": "0.9.0",
+        "scipy": "1.17.0",
+        "pandas": "3.0.0",
+        "scikit-learn": "1.8.0",
+        "marimo": "0.19.6"
+      },
+      "measured_scores": [
+        {
+          "model": "Common",
+          "multiplier": 1.0,
+          "rmse": 0.315651102795266,
+          "fold_sd": 0.006783776155414,
+          "r2": 0.640006928255111,
+          "successful_folds": 5
+        },
+        {
+          "model": "Separate",
+          "multiplier": 1.0,
+          "rmse": 1.328827743992416,
+          "fold_sd": 0.131752984595307,
+          "r2": -5.413219340108406,
+          "successful_folds": 5
+        },
+        {
+          "model": "Stratified",
+          "multiplier": 1.0,
+          "rmse": 0.176605958362908,
+          "fold_sd": 0.003482174127954,
+          "r2": 0.887318790411112,
+          "successful_folds": 5
+        },
+        {
+          "model": "Random forest",
+          "multiplier": 1.0,
+          "rmse": 0.180018621639878,
+          "fold_sd": 0.004320325833319,
+          "r2": 0.882958835067726,
+          "successful_folds": 5
+        }
+      ],
+      "numerical_fits": 15,
+      "all_recorded_numerical_fits_converged": true,
+      "sum_numerical_fit_seconds": 5.966719956006273,
+      "largest_recorded_stationarity": 5.568400345893135e-09,
+      "recorded_at_utc": "2026-11-20T08:52:52.327567+00:00",
+      "evidence_manifest": "notebook_exports/evidence/king_county_50x50_manifest.json",
+      "interpretation": "Measured original-data five-fold experiment. Fold identity and implementation differ from the authors; this is not a claim of matching the published table.",
+      "grid_side_length": 50,
+      "forest": {
+        "trees": 100,
+        "candidate_minimum_leaf_sizes": [
+          1
+        ],
+        "n_jobs": 1
+      }
+    }
+  ],
+  "normalization_evidence": {
+    "regression_data_loss": "SSE/(2N)",
+    "local_l2": "package weight * sum(theta^2)/2",
+    "graph": "package weight * sum_undirected_edges(w * delta^2)/2",
+    "paper_interpretation": "Local half norm follows Appendix A p28 and inspected author sum_squares_reg. Section 5.2 names the regularizer without restating its formula.",
+    "author_regularizer": "https://github.com/cvxgrp/strat_models/blob/0108114afe1265262f345bf93a5bc147f6cb146c/strat_models/regularizers.py#L39",
+    "author_squared_loss": "https://github.com/cvxgrp/strat_models/blob/0108114afe1265262f345bf93a5bc147f6cb146c/strat_models/losses.py#L164",
+    "house_mapping": "local lambda/(2N) and graph gamma/(2N); unhalved local lambda*norm^2 would instead require local lambda/N",
+    "classification_mapping": "single-logit local lambda/N and graph gamma/N; classification intercept mask is recorded separately"
+  }
+}

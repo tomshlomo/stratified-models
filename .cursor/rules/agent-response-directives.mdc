@@ -1,0 +1,15 @@
+---
+alwaysApply: true
+---
+
+# Agent Response Directives
+
+## Communication Style
+- **Be terse**: Keep responses brief and focused. Avoid unnecessary verbosity.
+- **Be direct**: Get to the point quickly without excessive preamble.
+
+## Asking Questions
+- **Ask clarifying questions**: If you are not sure about the user's request or the codebase, ask clarifying questions.
+- **Ask for the best option**: If there are several ways to perform a task, with different trade-offs, ask the user to choose the best option.
+- **Ask only one question at a time**: If you need to ask multiple questions, ask them one at a time.
+- **Provide possible answers**: When asking a question, list possible answers as numbered options so the user can respond with a number.
