@@ -1,0 +1,52 @@
+name: Tests and notebook review
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  common:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - run: uv sync --locked --python '${{ matrix.python }}' --extra common --group dev
+      - run: uv run --no-sync ruff check .
+      - run: uv run --no-sync ruff format --check .
+      - run: uv run --no-sync ty check
+      - run: uv run --no-sync ty check tests/typing_usage.py
+      - run: uv run --no-sync pytest
+      - run: uv run --no-sync pytest tests/test_notebook_structure.py
+        env:
+          RUN_NOTEBOOK_TESTS: "1"
+          MPLBACKEND: Agg
+      - run: uv run --no-sync python scripts/check_notebooks.py
+      - run: uv build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: notebooks-and-distributions-py${{ matrix.python }}
+          path: |
+            notebook_exports/
+            dist/
+
+  core-wheel:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - run: uv python install 3.12
+      - run: uv build
+      - run: uv venv --python 3.12 "$RUNNER_TEMP/core"
+      - run: uv pip install --python "$RUNNER_TEMP/core/bin/python" dist/*.whl
+      - run: '"$RUNNER_TEMP/core/bin/python" scripts/smoke_core.py'

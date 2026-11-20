@@ -1,32 +1,49 @@
-from stratified_models.problem import (
-    AbstractProblem,
-    Hyperparameters,
-    Objectives,
-    SolveInfo,
-    Solver,
-)
-from stratified_models.solvers.admm import ADMMSolver
-from stratified_models.solvers.cvxpy import CVXPYSolveInfo, CVXPYSolver
-from stratified_models.solvers.newton import (
-    CGPSDSolver,
-    DirectPSDSolver,
-    NewtonSolveInfo,
+"""Explicit numerical solver strategies and bounded reuse."""
+
+from .cache import SolverCache
+from .engine import solve
+from .types import (
+    ADMM,
+    ADMMContinuation,
+    AutoSolver,
+    CacheStatistics,
+    ConjugateGradient,
+    CVXPYSolver,
+    Diagnostics,
+    DirectSolve,
+    FailureReason,
+    IterationRecord,
+    Newton,
     NewtonSolver,
-    PSDSolver,
+    NumericalFailure,
+    NumericalProblem,
+    NumericalSuccess,
+    ObjectiveComponents,
+    QuadraticSolver,
+    QuadraticStatistics,
+    Solver,
 )
 
 __all__ = [
-    "ADMMSolver",
-    "AbstractProblem",
-    "CGPSDSolver",
-    "CVXPYSolveInfo",
+    "ADMM",
+    "ADMMContinuation",
+    "AutoSolver",
     "CVXPYSolver",
-    "DirectPSDSolver",
-    "Hyperparameters",
-    "NewtonSolveInfo",
+    "CacheStatistics",
+    "ConjugateGradient",
+    "Diagnostics",
+    "DirectSolve",
+    "FailureReason",
+    "IterationRecord",
+    "Newton",
     "NewtonSolver",
-    "Objectives",
-    "PSDSolver",
-    "SolveInfo",
+    "NumericalFailure",
+    "NumericalProblem",
+    "NumericalSuccess",
+    "ObjectiveComponents",
+    "QuadraticSolver",
+    "QuadraticStatistics",
     "Solver",
+    "SolverCache",
+    "solve",
 ]

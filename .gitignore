@@ -18,3 +18,8 @@ examples/__marimo__/session/housing.py.json
 */.DS_Store
 
 .DS_Store
+examples/__marimo__/
+notebook_exports/
+data/
+artifacts/
+.config/

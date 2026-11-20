@@ -1,84 +1,58 @@
 [project]
 name = "stratified-models"
-version = "0.1.0"
-description = "Add your description here"
+version = "0.2.0"
+description = "Composable Laplacian regularized stratified regression and classification with replayable data sources"
 readme = "README.md"
-authors = [
-    { name = "tom shlomo", email = "tom.shlomo@ridewithvia.com" }
-]
-requires-python = ">=3.13"
+authors = [{ name = "Tom Shlomo" }]
+requires-python = ">=3.12"
+license = "MIT"
 dependencies = [
     "attrs>=25.4.0",
-    "cvxpy>=1.7.5",
-    "jax>=0.9.0",
-    "mcp>=1.26.0",
-    "networkx>=3.6.1",
-    "numpy>=2.4.1",
-    "optuna>=4.7.0",
-    "pandas>=3.0.0",
-    "pyzmq>=27.1.0",
-    "scipy>=1.17.0",
-    "structlog>=25.5.0",
+    "jax>=0.9.0,<0.10",
+    "numpy>=2.4.1,<3",
+    "scipy>=1.17.0,<2",
 ]
 
+[project.optional-dependencies]
+pandas = ["pandas>=3.0.0"]
+polars = ["polars>=1.30"]
+parquet = ["pyarrow>=20"]
+sklearn = ["scikit-learn>=1.8.0"]
+tuning = ["optuna>=4.7.0"]
+cvxpy = ["cvxpy>=1.7.5"]
+notebooks = [
+    "marimo>=0.19.6,<0.20",
+    "matplotlib>=3.10.8",
+    "seaborn>=0.13.2",
+    "pandas>=3.0.0",
+    "scikit-learn>=1.8.0",
+    "openpyxl>=3.1.5",
+]
+common = ["stratified-models[pandas,polars,parquet,sklearn,tuning,cvxpy,notebooks]"]
+
 [build-system]
-requires = ["uv_build>=0.9.6,<0.10.0"]
+requires = ["uv_build>=0.9.6,<0.14"]
 build-backend = "uv_build"
 
 [dependency-groups]
-dev = [
-    "jsonargparse>=4.45.0",
-    "pre-commit>=4.5.1",
-    "pytest>=9.0.2",
-    "ruff>=0.14.13",
-    "ty>=0.0.13",
-]
-examples = [
-    "marimo>=0.19.6",
-    "matplotlib>=3.10.8",
-    "pandas>=3.0.0",
-    "scikit-learn>=1.8.0",
-    "scipy>=1.17.0",
-    "seaborn>=0.13.2",
-]
+dev = ["pytest>=9.0.2", "ruff>=0.14.13", "ty>=0.0.13"]
 
 [tool.ruff]
-extend-exclude = ["examples", "legacy"]
+extend-exclude = ["legacy", "examples"]
+line-length = 88
 
 [tool.ruff.lint]
-# Start with defaults (E, F) and add Bugbear (B) and isort (I)
-extend-select = ["ALL"]
-ignore = [
-    "D103",
-    "D104",
-    "D100",
-    "D101",
-    "S101",
-    "D107",
-    "D102",
-    "D105",
-    "D203",
-    "D213",
-    "TC003",
-    "TC001",
-    "TD003",
-    "FIX002",
-    "TC002",
-    "TD002", # Missing author in TODO; try: `# TODO(<author_name>): ...` or `# TODO @<author_name>: ...`
-    "ERA001", # Found commented-out code
-    "D205", # 1 blank line required between summary line and description
-    "N803", # Argument name `X` should be lowercase
-    "COM812", # Missing trailing comma (handled by ruff formatter)
-]
-
-
-[tool.ruff.lint.extend-per-file-ignores]
-"tests/**/*.py" = ["SLF001", "PLR2004"]
-"**/test_*.py" = ["SLF001", "PLR2004"]
+select = ["E4", "E7", "E9", "F", "I", "B", "UP", "ANN"]
 
 [tool.ty.src]
 include = ["src"]
 exclude = ["legacy", "examples"]
 
 [tool.pytest.ini_options]
-norecursedirs = ["legacy"]
+testpaths = ["tests"]
+pythonpath = ["."]
+norecursedirs = ["legacy", ".venv"]
+markers = [
+    "integration: checks installed extras and end-to-end workflows",
+    "slow: full reproduction or resource measurements",
+]
